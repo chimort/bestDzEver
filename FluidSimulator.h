@@ -3,15 +3,15 @@
 #include <array>
 #include <iostream>
 #include <random>
+#include <cassert>       
+#include <algorithm>     
+#include <tuple>         
+#include <utility>       
 #include "Fixed.h"
 #include "deltas.h"
-#include "Config.h"
-
-constexpr size_t N = 36;
-constexpr size_t M = 84;
 
 
-template<typename T, size_t N, size_t M>
+template<typename T, size_t N = 36, size_t M = 84>
 struct VectorField {
     std::array<T, deltas.size()> v[N][M];
 
@@ -27,20 +27,56 @@ struct VectorField {
     }
 };
 
-template<typename Ptype, typename VType, typename VFlowType, size_t N, size_t M>
+template<typename Ptype, typename VType, typename VFlowType, size_t N = 36, size_t M = 84>
 class FluidSimulator {
 public:
 
     FluidSimulator() = default;
     void runSimulation(size_t T);
-    void readInputFile(const std::string& filename);
 
 private:
+    char field[N][M + 1] = {
+        "####################################################################################",
+        "#                                                                                  #",
+        "#                                                                                  #",
+        "#                                                                                  #",
+        "#                                                                                  #",
+        "#                                                                                  #",
+        "#                                       .........                                  #",
+        "#..............#            #           .........                                  #",
+        "#..............#            #           .........                                  #",
+        "#..............#            #           .........                                  #",
+        "#..............#            #                                                      #",
+        "#..............#            #                                                      #",
+        "#..............#            #                                                      #",
+        "#..............#            #                                                      #",
+        "#..............#............#                                                      #",
+        "#..............#............#                                                      #",
+        "#..............#............#                                                      #",
+        "#..............#............#                                                      #",
+        "#..............#............#                                                      #",
+        "#..............#............#                                                      #",
+        "#..............#............#                                                      #",
+        "#..............#............#                                                      #",
+        "#..............#............################                     #                 #",
+        "#...........................#....................................#                 #",
+        "#...........................#....................................#                 #",
+        "#...........................#....................................#                 #",
+        "##################################################################                 #",
+        "#                                                                                  #",
+        "#                                                                                  #",
+        "#                                                                                  #",
+        "#                                                                                  #",
+        "#                                                                                  #",
+        "#                                                                                  #",
+        "#                                                                                  #",
+        "#                                                                                  #",
+        "####################################################################################",
+    };
     Ptype rho_[256] {};
     Ptype g_;
-    char field[N][M + 1]{};
     int dirs[N][M]{};
-    PType p[N][M]{}, old_p[N][M]{};
+    Ptype p[N][M]{}, old_p[N][M]{};
 
     VectorField<VType, N, M> velocity;
     VectorField<VFlowType, N, M> velocity_flow;
@@ -50,19 +86,20 @@ private:
 
     struct ParticleParams {
         char type;
-        PType cur_p;
+        Ptype cur_p;
         std::array<VType, deltas.size()> v;
 
-        void swap_with(int x, int y, FluidSimulator* simulator) {
-            std::swap(simulator->field[x][y], type);
-            std::swap(simulator->p[x][y], cur_p);
-            std::swap(simulator->velocity.v[x][y], v);
+        void swap_with(FluidSimulator& fs, int x, int y) {
+            std::swap(fs.field[x][y], type);
+            std::swap(fs.p[x][y], cur_p);
+            std::swap(fs.velocity.v[x][y], v);
         }
     };
     
+    void readInputFile(const std::string& filename);
 
-    std::tuple<Ptype, bool, std::pair<int, int>> propagate_flow(int x, int y, typename Ptype lim);
-    Ptype random01();
+    std::tuple<Ptype, bool, std::pair<int, int>> propagate_flow(int x, int y, Ptype lim);
+    double random01();
     void propagate_stop(int x, int y, bool force = false);
     Ptype move_prob(int x, int y); 
     bool propagate_move(int x, int y, bool is_first);
@@ -70,37 +107,38 @@ private:
 };
 
 template<typename Ptype, typename VType, typename VFlowType, size_t N, size_t M>
-std::tuple<Ptype, bool, std::pair<int, int>> propagate_flow(int x, int y, Ptype lim) 
+std::tuple<Ptype, bool, std::pair<int, int>> 
+FluidSimulator<Ptype, VType, VFlowType, N, M>::propagate_flow(int x, int y, Ptype lim)  
 {
-    last_use[x][y] = UT - 1;
+    this->last_use[x][y] = this->UT - 1;
     Ptype ret = 0;
     for (auto [dx, dy] : deltas) {
         int nx = x + dx, ny = y + dy;
-        if (field[nx][ny] != '#' && last_use[nx][ny] < UT) {
-            auto cap = velocity.get(x, y, dx, dy);
-            auto flow = velocity_flow.get(x, y, dx, dy);
+        if (this->field[nx][ny] != '#' && this->last_use[nx][ny] < this->UT) {
+            auto cap = this->velocity.get(x, y, dx, dy);
+            auto flow = this->velocity_flow.get(x, y, dx, dy);
             if (flow == cap) {
                 continue;
             }
             // assert(v >= velocity_flow.get(x, y, dx, dy));
-            auto vp = min(lim, cap - flow);
-            if (last_use[nx][ny] == UT - 1) {
-                velocity_flow.add(x, y, dx, dy, vp);
-                last_use[x][y] = UT;
+            auto vp = std::min(lim, cap - flow);
+            if (this->last_use[nx][ny] == this->UT - 1) {
+                this->velocity_flow.add(x, y, dx, dy, vp);
+                this->last_use[x][y] = this->UT;
                 // cerr << x << " " << y << " -> " << nx << " " << ny << " " << vp << " / " << lim << "\n";
                 return {vp, 1, {nx, ny}};
             }
-            auto [t, prop, end] = propagate_flow(nx, ny, vp);
+            auto [t, prop, end] = this->propagate_flow(nx, ny, vp);
             ret += t;
             if (prop) {
-                velocity_flow.add(x, y, dx, dy, t);
-                last_use[x][y] = UT;
+                this->velocity_flow.add(x, y, dx, dy, t);
+                this->last_use[x][y] = this->UT;
                 // cerr << x << " " << y << " -> " << nx << " " << ny << " " << t << " / " << lim << "\n";
-                return {t, prop && end != pair(x, y), end};
+                return {t, prop && end != std::make_pair(x, y), end};
             }
         }
     }
-    last_use[x][y] = UT;
+    this->last_use[x][y] = this->UT;
     return {ret, 0, {0, 0}};
-}
+};
 

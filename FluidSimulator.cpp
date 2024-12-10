@@ -1,13 +1,16 @@
 #include "FluidSimulator.h"
+#include <cstring>
+#include <random>
 
 template<typename Ptype, typename VType, typename VFlowType, size_t N, size_t M>
-Ptype FluidSimulator<Ptype, VType, VFlowType, N, M>::random01()
-{
-    return typename Config::PressureType::from_raw((rnd() & ((1 << M) - 1)));
+double FluidSimulator<Ptype, VType, VFlowType, N, M>::random01()
+{       
+    std::uniform_real_distribution<double> dist(0.0, 1.0);
+    return dist(random_generator_);
 }
 
 template<typename Ptype, typename VType, typename VFlowType, size_t N, size_t M>
-void FluidSimulator<Ptype, VType, VFlowType, N, M>::propagate_stop(int x, int y, bool force = false)
+void FluidSimulator<Ptype, VType, VFlowType, N, M>::propagate_stop(int x, int y, bool force)
 {
     if (!force) {
         bool stop = true;
@@ -35,7 +38,7 @@ void FluidSimulator<Ptype, VType, VFlowType, N, M>::propagate_stop(int x, int y,
 template<typename Ptype, typename VType, typename VFlowType, size_t N, size_t M>
 Ptype FluidSimulator<Ptype, VType, VFlowType, N, M>::move_prob(int x, int y)
 {
-    typename Config::PressureType sum = 0;
+    Ptype sum = 0;
     for (size_t i = 0; i < deltas.size(); ++i) {
         auto [dx, dy] = deltas[i];
         int nx = x + dx, ny = y + dy;
@@ -58,8 +61,8 @@ bool FluidSimulator<Ptype, VType, VFlowType, N, M>::propagate_move(int x, int y,
     bool ret = false;
     int nx = -1, ny = -1;
     do {
-        std::array<Fixed, deltas.size()> tres;
-        Fixed sum = 0;
+        std::array<Ptype, deltas.size()> tres;
+        Ptype sum = 0;
         for (size_t i = 0; i < deltas.size(); ++i) {
             auto [dx, dy] = deltas[i];
             int nx = x + dx, ny = y + dy;
@@ -80,7 +83,7 @@ bool FluidSimulator<Ptype, VType, VFlowType, N, M>::propagate_move(int x, int y,
             break;
         }
 
-        Fixed p = random01() * sum;
+        Ptype p = sum * random01();
         size_t d = std::ranges::upper_bound(tres, p) - tres.begin();
 
         auto [dx, dy] = deltas[d];
@@ -101,9 +104,9 @@ bool FluidSimulator<Ptype, VType, VFlowType, N, M>::propagate_move(int x, int y,
     if (ret) {
         if (!is_first) {
             ParticleParams pp{};
-            pp.swap_with(x, y);
-            pp.swap_with(nx, ny);
-            pp.swap_with(x, y);
+            pp.swap_with(*this, x, y);
+            pp.swap_with(*this, nx, ny);
+            pp.swap_with(*this, x, y);
         }
     }
     return ret;
@@ -113,6 +116,9 @@ bool FluidSimulator<Ptype, VType, VFlowType, N, M>::propagate_move(int x, int y,
 template<typename Ptype, typename VType, typename VFlowType, size_t N, size_t M>
 void FluidSimulator<Ptype, VType, VFlowType, N, M>::runSimulation(size_t T)
 {
+    rho_[' '] = 0.01;
+    rho_['.'] = 1000;
+    g_ = 0.1;
     for (size_t x = 0; x < N; ++x) {
             for (size_t y = 0; y < M; ++y) {
                 if (field[x][y] == '#')
@@ -125,7 +131,7 @@ void FluidSimulator<Ptype, VType, VFlowType, N, M>::runSimulation(size_t T)
 
     for (size_t i = 0; i < T; ++i) {
         
-        Fixed total_delta_p = 0;    
+        Ptype total_delta_p = 0;    
         // Apply external forces
         for (size_t x = 0; x < N; ++x) {
             for (size_t y = 0; y < M; ++y) {
@@ -137,7 +143,7 @@ void FluidSimulator<Ptype, VType, VFlowType, N, M>::runSimulation(size_t T)
         }
 
         // Apply forces from p
-        memcpy(old_p, p, sizeof(p));
+        memcpy(this->old_p, this->p, sizeof(this->p));
         for (size_t x = 0; x < N; ++x) {
             for (size_t y = 0; y < M; ++y) {
                 if (field[x][y] == '#')
@@ -211,7 +217,7 @@ void FluidSimulator<Ptype, VType, VFlowType, N, M>::runSimulation(size_t T)
         for (size_t x = 0; x < N; ++x) {
             for (size_t y = 0; y < M; ++y) {
                 if (field[x][y] != '#' && last_use[x][y] != UT) {
-                    if (random01() < move_prob(x, y)) {
+                    if (move_prob(x, y) > random01()) {
                         prop = true;
                         propagate_move(x, y, true);
                     } else {
@@ -222,10 +228,12 @@ void FluidSimulator<Ptype, VType, VFlowType, N, M>::runSimulation(size_t T)
         }
 
         if (prop) {
-            cout << "Tick " << i << ":\n";
+            std::cout << "Tick " << i << ":\n";
             for (size_t x = 0; x < N; ++x) {
-                cout << field[x] << "\n";
+                std::cout << field[x] << "\n";
             }
         }
     }
 }
+
+template class FluidSimulator<Fixed<32, 16>, Fixed<32, 16>, Fixed<32, 16>, 36, 84>;

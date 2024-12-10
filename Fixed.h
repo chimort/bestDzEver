@@ -38,11 +38,11 @@ public:
         return Fixed(RawTag{}, raw);
     }
 
-    operator float() const {
+    explicit operator float() const {
         return static_cast<float>(v) / (1ULL << K);
     }
 
-    operator double() const {
+    explicit operator double() const {
         return static_cast<double>(v) / (1ULL << K);
     }
 
@@ -81,7 +81,115 @@ Fixed<N, K> operator/(const Fixed<N, K>& a, const Fixed<N, K>& b) {
 }
 
 template <size_t N, size_t K>
+Fixed<N, K>& operator+=(Fixed<N, K>& a, const Fixed<N, K>& b) {
+    a = a + b;
+    return a;
+}
+
+template <size_t N, size_t K>
+Fixed<N, K>& operator-=(Fixed<N, K>& a, const Fixed<N, K>& b) {
+    a = a - b;
+    return a;
+}
+
+template <size_t N, size_t K>
+Fixed<N, K>& operator*=(Fixed<N, K>& a, const Fixed<N, K>& b) {
+    a = a * b;
+    return a;
+}
+
+template <size_t N, size_t K>
+Fixed<N, K>& operator/=(Fixed<N, K>& a, const Fixed<N, K>& b) {
+    a = a / b;
+    return a;
+}
+
+// Stream Insertion Operator
+template <size_t N, size_t K>
 std::ostream& operator<<(std::ostream& os, const Fixed<N, K>& fixed) {
     os << static_cast<double>(fixed);
     return os;
+}
+
+template <size_t N, size_t K>
+bool operator>(const Fixed<N, K>& a, int b) {
+    return static_cast<double>(a) > static_cast<double>(b);
+}
+
+template <size_t N, size_t K>
+bool operator<(const Fixed<N, K>& a, int b) {
+    return static_cast<double>(a) < static_cast<double>(b);
+}
+
+template <size_t N, size_t K>
+bool operator>=(const Fixed<N, K>& a, int b) {
+    return static_cast<double>(a) >= static_cast<double>(b);
+}
+
+template <size_t N, size_t K>
+bool operator<=(const Fixed<N, K>& a, int b) {
+    return static_cast<double>(a) <= static_cast<double>(b);
+}
+
+template <size_t N, size_t K>
+bool operator==(const Fixed<N, K>& a, int b) {
+    return static_cast<double>(a) == static_cast<double>(b);
+}
+
+template <size_t N, size_t K>
+bool operator!=(const Fixed<N, K>& a, int b) {
+    return static_cast<double>(a) != static_cast<double>(b);
+}
+
+template <size_t N, size_t K>
+bool operator>(const Fixed<N, K>& a, double b) {
+    return static_cast<double>(a) > b;
+}
+
+template <size_t N, size_t K>
+bool operator<(const Fixed<N, K>& a, double b) {
+    return static_cast<double>(a) < b;
+}
+
+template <size_t N, size_t K>
+bool operator>=(const Fixed<N, K>& a, double b) {
+    return static_cast<double>(a) >= b;
+}
+
+template <size_t N, size_t K>
+bool operator<=(const Fixed<N, K>& a, double b) {
+    return static_cast<double>(a) <= b;
+}
+
+template <size_t N, size_t K>
+bool operator==(const Fixed<N, K>& a, double b) {
+    return static_cast<double>(a) == b;
+}
+
+template <size_t N, size_t K>
+bool operator!=(const Fixed<N, K>& a, double b) {
+    return static_cast<double>(a) != b;
+}
+
+// Arithmetic Operators with double
+template <size_t N, size_t K>
+Fixed<N, K> operator*(const Fixed<N, K>& a, double b) {
+    return Fixed<N, K>(static_cast<double>(a) * b);
+}
+
+template <size_t N, size_t K>
+Fixed<N, K> operator/(const Fixed<N, K>& a, double b) {
+    return Fixed<N, K>(static_cast<double>(a) / b);
+}
+
+template <size_t N, size_t K>
+Fixed<N, K>& operator*=(Fixed<N, K>& a, double b) {
+    a = static_cast<double>(a) * b;
+    return a;
+}
+
+template <size_t N, size_t K>
+Fixed<N, K>& operator/=(Fixed<N, K>& a, double b) {
+    a = static_cast<double>(a) / b;
+    return a;
 }

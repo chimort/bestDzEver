@@ -3,5 +3,6 @@ project(bestDz)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_COMPILER "g++-11")
 
-add_executable(bestDz main.cpp FastFixed.h Config.h)
+add_executable(bestDz main.cpp FluidSimulator.cpp)
