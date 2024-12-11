@@ -33,6 +33,7 @@ struct Fixed {
 
     constexpr Fixed(RawTag, StorageType raw) : v(raw) {}
 
+
 public:
     static constexpr Fixed from_raw(StorageType raw) {
         return Fixed(RawTag{}, raw);
@@ -104,7 +105,6 @@ Fixed<N, K>& operator/=(Fixed<N, K>& a, const Fixed<N, K>& b) {
     return a;
 }
 
-// Stream Insertion Operator
 template <size_t N, size_t K>
 std::ostream& operator<<(std::ostream& os, const Fixed<N, K>& fixed) {
     os << static_cast<double>(fixed);
@@ -171,7 +171,6 @@ bool operator!=(const Fixed<N, K>& a, double b) {
     return static_cast<double>(a) != b;
 }
 
-// Arithmetic Operators with double
 template <size_t N, size_t K>
 Fixed<N, K> operator*(const Fixed<N, K>& a, double b) {
     return Fixed<N, K>(static_cast<double>(a) * b);
