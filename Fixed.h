@@ -1,194 +1,375 @@
+// Fixed.h
 #pragma once
 
 #include <cstdint>
 #include <iostream>
-#include <compare>
 #include <type_traits>
+#include <compare>
 
-struct RawTag {};
+// Определение тегов для различения типов
+struct FixedTag {};
+struct FastTag {};
+struct RawTag {}; // Определение RawTag
 
-template <size_t N, size_t K>
-struct Fixed {
-    static_assert(N <= 64, "FIXED<N, K> поддерживает максимум 64 бита.");
-    static_assert(N > 0, "FIXED<N, K> должно содержать хотя бы 1 бит.");
+// Шаблонная структура FixedPoint с дополнительным параметром Tag
+template <size_t N, size_t K, typename Tag = FixedTag>
+struct FixedPoint {
+    static_assert(N <= 64, "FixedPoint<N, K> поддерживает максимум 64 бита.");
+    static_assert(N > 0, "FixedPoint<N, K> должно содержать хотя бы 1 бит.");
     static_assert(K < N, "Количество битов дробной части должно быть меньше общего количества битов.");
 
+    // Определение типа хранения на основе N и Tag
     using StorageType = std::conditional_t<
-        (N <= 8), int8_t,
+        std::is_same_v<Tag, FixedTag>,
         std::conditional_t<
-            (N <= 16), int16_t,
+            (N <= 8), int8_t,
             std::conditional_t<
-                (N <= 32), int32_t,
-                int64_t
+                (N <= 16), int16_t,
+                std::conditional_t<
+                    (N <= 32), int32_t,
+                    int64_t
+                >
+            >
+        >,
+        // Tag == FastTag
+        std::conditional_t<
+            (N <= 8), int_fast8_t,
+            std::conditional_t<
+                (N <= 16), int_fast16_t,
+                std::conditional_t<
+                    (N <= 32), int_fast32_t,
+                    int_fast64_t
+                >
             >
         >
     >;
 
     StorageType v;
 
-    Fixed() : v(0) {}
-    constexpr Fixed(int32_t value) : v(static_cast<StorageType>(value) << K) {}
-    constexpr Fixed(float f) : v(static_cast<StorageType>(f * (1ULL << K))) {}
-    constexpr Fixed(double f) : v(static_cast<StorageType>(f * (1ULL << K))) {}
+    // Конструкторы
+    FixedPoint() : v(0) {}
 
-    constexpr Fixed(RawTag, StorageType raw) : v(raw) {}
+    constexpr FixedPoint(int32_t value) 
+        : v(static_cast<StorageType>(value) << K) {}
 
+    constexpr FixedPoint(float f) 
+        : v(static_cast<StorageType>(f * (1ULL << K))) {}
 
-public:
-    static constexpr Fixed from_raw(StorageType raw) {
-        return Fixed(RawTag{}, raw);
+    constexpr FixedPoint(double f) 
+        : v(static_cast<StorageType>(f * (1ULL << K))) {}
+
+    constexpr FixedPoint(RawTag, StorageType raw) 
+        : v(raw) {}
+
+    // Шаблонный конструктор копирования для различных FixedPoint типов
+    template <size_t M, size_t L, typename OtherTag>
+    constexpr FixedPoint(const FixedPoint<M, L, OtherTag>& other) {
+        double asDouble = static_cast<double>(other);
+        v = static_cast<StorageType>(asDouble * (1ULL << K));
     }
 
-    explicit operator float() const {
+    // Шаблонный оператор присваивания для различных FixedPoint типов
+    template <size_t M, size_t L, typename OtherTag>
+    FixedPoint& operator=(const FixedPoint<M, L, OtherTag>& other) {
+        double asDouble = static_cast<double>(other);
+        v = static_cast<StorageType>(asDouble * (1ULL << K));
+        return *this;
+    }
+
+public:
+    // Функция для создания FixedPoint из "сырого" значения
+    static constexpr FixedPoint from_raw(StorageType raw) {
+        return FixedPoint(RawTag{}, raw);
+    }
+
+    // Явные преобразования в float и double
+    operator float() const {
         return static_cast<float>(v) / (1ULL << K);
     }
 
-    explicit operator double() const {
+    operator double() const {
         return static_cast<double>(v) / (1ULL << K);
     }
 
-    auto operator<=>(const Fixed&) const = default;
-    bool operator==(const Fixed&) const = default;
+    template <typename Integral, typename = std::enable_if_t<std::is_integral_v<Integral>>>
+    operator Integral() const {
+        return static_cast<Integral>(v >> K);
+    }
+
+    // Автоматически сгенерированные операторы сравнения
+    auto operator<=>(const FixedPoint&) const = default;
+    bool operator==(const FixedPoint&) const = default;
+
+    // Арифметические операторы
+    FixedPoint operator+(const FixedPoint& other) const {
+        FixedPoint result;
+        result.v = this->v + other.v;
+        return result;
+    }
+
+    FixedPoint operator-(const FixedPoint& other) const {
+        FixedPoint result;
+        result.v = this->v - other.v;
+        return result;
+    }
+
+    FixedPoint operator*(const FixedPoint& other) const {
+        using IntermediateType = std::conditional_t<
+            (N <= 16), int_fast32_t,
+            int_fast64_t
+        >;
+        IntermediateType temp = static_cast<IntermediateType>(v) * static_cast<IntermediateType>(other.v);
+        FixedPoint result;
+        result.v = static_cast<StorageType>(temp >> K);
+        return result;
+    }
+
+    FixedPoint operator/(const FixedPoint& other) const {
+        using IntermediateType = std::conditional_t<
+            (N <= 16), int_fast32_t,
+            int_fast64_t
+        >;
+        IntermediateType temp = (static_cast<IntermediateType>(v) << K) / other.v;
+        FixedPoint result;
+        result.v = static_cast<StorageType>(temp);
+        return result;
+    }
+
+    // Арифметические операторы с присваиванием
+    FixedPoint& operator+=(const FixedPoint& other) {
+        this->v += other.v;
+        return *this;
+    }
+
+    FixedPoint& operator-=(const FixedPoint& other) {
+        this->v -= other.v;
+        return *this;
+    }
+
+    FixedPoint& operator*=(const FixedPoint& other) {
+        *this = *this * other;
+        return *this;
+    }
+
+    FixedPoint& operator/=(const FixedPoint& other) {
+        *this = *this / other;
+        return *this;
+    }
 };
 
+// Алиасы для удобства использования
 template <size_t N, size_t K>
-Fixed<N, K> operator+(const Fixed<N, K>& a, const Fixed<N, K>& b) {
-    return Fixed<N, K>::from_raw(a.v + b.v);
-}
+using FIXED = FixedPoint<N, K, FixedTag>;
 
 template <size_t N, size_t K>
-Fixed<N, K> operator-(const Fixed<N, K>& a, const Fixed<N, K>& b) {
-    return Fixed<N, K>::from_raw(a.v - b.v);
+using FAST_FIXED = FixedPoint<N, K, FastTag>;
+
+// Операторы сравнения между различными типами FixedPoint
+template <size_t N1, size_t K1, typename Tag1, size_t N2, size_t K2, typename Tag2>
+constexpr bool operator<=(const FixedPoint<N1, K1, Tag1>& lhs, const FixedPoint<N2, K2, Tag2>& rhs) {
+    return static_cast<double>(lhs) <= static_cast<double>(rhs);
 }
 
-template <size_t N, size_t K>
-Fixed<N, K> operator*(const Fixed<N, K>& a, const Fixed<N, K>& b) {
-    using IntermediateType = std::conditional_t<
-        (N <= 16), int32_t,
-        int64_t
-    >;
-    IntermediateType temp = static_cast<IntermediateType>(a.v) * static_cast<IntermediateType>(b.v);
-    return Fixed<N, K>::from_raw(static_cast<typename Fixed<N, K>::StorageType>(temp >> K));
+template <size_t N1, size_t K1, typename Tag1, size_t N2, size_t K2, typename Tag2>
+constexpr bool operator<(const FixedPoint<N1, K1, Tag1>& lhs, const FixedPoint<N2, K2, Tag2>& rhs) {
+    return static_cast<double>(lhs) < static_cast<double>(rhs);
 }
 
-template <size_t N, size_t K>
-Fixed<N, K> operator/(const Fixed<N, K>& a, const Fixed<N, K>& b) {
-    using IntermediateType = std::conditional_t<
-        (N <= 16), int32_t,
-        int64_t
-    >;
-    IntermediateType temp = (static_cast<IntermediateType>(a.v) << K) / b.v;
-    return Fixed<N, K>::from_raw(static_cast<typename Fixed<N, K>::StorageType>(temp));
+template <size_t N1, size_t K1, typename Tag1, size_t N2, size_t K2, typename Tag2>
+constexpr bool operator>=(const FixedPoint<N1, K1, Tag1>& lhs, const FixedPoint<N2, K2, Tag2>& rhs) {
+    return static_cast<double>(lhs) >= static_cast<double>(rhs);
 }
 
-template <size_t N, size_t K>
-Fixed<N, K>& operator+=(Fixed<N, K>& a, const Fixed<N, K>& b) {
-    a = a + b;
-    return a;
+template <size_t N1, size_t K1, typename Tag1, size_t N2, size_t K2, typename Tag2>
+constexpr bool operator>(const FixedPoint<N1, K1, Tag1>& lhs, const FixedPoint<N2, K2, Tag2>& rhs) {
+    return static_cast<double>(lhs) > static_cast<double>(rhs);
 }
 
-template <size_t N, size_t K>
-Fixed<N, K>& operator-=(Fixed<N, K>& a, const Fixed<N, K>& b) {
-    a = a - b;
-    return a;
+template <size_t N1, size_t K1, typename Tag1, size_t N2, size_t K2, typename Tag2>
+constexpr bool operator==(const FixedPoint<N1, K1, Tag1>& lhs, const FixedPoint<N2, K2, Tag2>& rhs) {
+    return static_cast<double>(lhs) == static_cast<double>(rhs);
 }
 
-template <size_t N, size_t K>
-Fixed<N, K>& operator*=(Fixed<N, K>& a, const Fixed<N, K>& b) {
-    a = a * b;
-    return a;
+template <size_t N1, size_t K1, typename Tag1, size_t N2, size_t K2, typename Tag2>
+constexpr bool operator!=(const FixedPoint<N1, K1, Tag1>& lhs, const FixedPoint<N2, K2, Tag2>& rhs) {
+    return !(lhs == rhs);
 }
 
-template <size_t N, size_t K>
-Fixed<N, K>& operator/=(Fixed<N, K>& a, const Fixed<N, K>& b) {
-    a = a / b;
-    return a;
+// Арифметические операторы между различными типами FixedPoint
+template <size_t N1, size_t K1, typename Tag1, size_t N2, size_t K2, typename Tag2>
+constexpr FIXED<(N1 > N2 ? N1 : N2), (K1 > K2 ? K1 : K2)>
+operator+(const FixedPoint<N1, K1, Tag1>& lhs, const FixedPoint<N2, K2, Tag2>& rhs) {
+    double sum = static_cast<double>(lhs) + static_cast<double>(rhs);
+    constexpr size_t NewN = (N1 > N2 ? N1 : N2);
+    constexpr size_t NewK = (K1 > K2 ? K1 : K2);
+    return FIXED<NewN, NewK>(sum);
 }
 
-template <size_t N, size_t K>
-std::ostream& operator<<(std::ostream& os, const Fixed<N, K>& fixed) {
-    os << static_cast<double>(fixed);
-    return os;
+template <size_t N1, size_t K1, typename Tag1, size_t N2, size_t K2, typename Tag2>
+constexpr FIXED<(N1 > N2 ? N1 : N2), (K1 > K2 ? K1 : K2)>
+operator-(const FixedPoint<N1, K1, Tag1>& lhs, const FixedPoint<N2, K2, Tag2>& rhs) {
+    double diff = static_cast<double>(lhs) - static_cast<double>(rhs);
+    constexpr size_t NewN = (N1 > N2 ? N1 : N2);
+    constexpr size_t NewK = (K1 > K2 ? K1 : K2);
+    return FIXED<NewN, NewK>(diff);
 }
 
-template <size_t N, size_t K>
-bool operator>(const Fixed<N, K>& a, int b) {
-    return static_cast<double>(a) > static_cast<double>(b);
+template <size_t N1, size_t K1, typename Tag1, size_t N2, size_t K2, typename Tag2>
+constexpr FIXED<(N1 + N2), (K1 + K2)>
+operator*(const FixedPoint<N1, K1, Tag1>& lhs, const FixedPoint<N2, K2, Tag2>& rhs) {
+    double product = static_cast<double>(lhs) * static_cast<double>(rhs);
+    constexpr size_t NewN = N1 + N2;
+    constexpr size_t NewK = K1 + K2;
+    return FIXED<NewN, NewK>(product);
 }
 
-template <size_t N, size_t K>
-bool operator<(const Fixed<N, K>& a, int b) {
-    return static_cast<double>(a) < static_cast<double>(b);
+template <size_t N1, size_t K1, typename Tag1, size_t N2, size_t K2, typename Tag2>
+constexpr FIXED<(N1 > N2 ? N1 : N2), (K1 > K2 ? K1 : K2)>
+operator/(const FixedPoint<N1, K1, Tag1>& lhs, const FixedPoint<N2, K2, Tag2>& rhs) {
+    double quotient = static_cast<double>(lhs) / static_cast<double>(rhs);
+    constexpr size_t NewN = (N1 > N2 ? N1 : N2);
+    constexpr size_t NewK = (K1 > K2 ? K1 : K2);
+    return FIXED<NewN, NewK>(quotient);
 }
 
-template <size_t N, size_t K>
-bool operator>=(const Fixed<N, K>& a, int b) {
-    return static_cast<double>(a) >= static_cast<double>(b);
+// Add operators where FixedPoint is on the right
+template <size_t N, size_t K, typename Tag>
+FixedPoint<N, K, Tag> operator+(double lhs, const FixedPoint<N, K, Tag>& rhs) {
+    return FixedPoint<N, K, Tag>(lhs + static_cast<double>(rhs));
 }
 
-template <size_t N, size_t K>
-bool operator<=(const Fixed<N, K>& a, int b) {
-    return static_cast<double>(a) <= static_cast<double>(b);
+template <size_t N, size_t K, typename Tag>
+FixedPoint<N, K, Tag> operator-(double lhs, const FixedPoint<N, K, Tag>& rhs) {
+    return FixedPoint<N, K, Tag>(lhs - static_cast<double>(rhs));
 }
 
-template <size_t N, size_t K>
-bool operator==(const Fixed<N, K>& a, int b) {
-    return static_cast<double>(a) == static_cast<double>(b);
+template <size_t N, size_t K, typename Tag>
+FixedPoint<N, K, Tag> operator*(double lhs, const FixedPoint<N, K, Tag>& rhs) {
+    return FixedPoint<N, K, Tag>(lhs * static_cast<double>(rhs));
 }
 
-template <size_t N, size_t K>
-bool operator!=(const Fixed<N, K>& a, int b) {
-    return static_cast<double>(a) != static_cast<double>(b);
+template <size_t N, size_t K, typename Tag>
+FixedPoint<N, K, Tag> operator/(double lhs, const FixedPoint<N, K, Tag>& rhs) {
+    return FixedPoint<N, K, Tag>(lhs / static_cast<double>(rhs));
 }
 
-template <size_t N, size_t K>
-bool operator>(const Fixed<N, K>& a, double b) {
-    return static_cast<double>(a) > b;
+// Similarly, add overloads for float if necessary
+template <size_t N, size_t K, typename Tag>
+FixedPoint<N, K, Tag> operator+(const FixedPoint<N, K, Tag>& lhs, float rhs) {
+    return FixedPoint<N, K, Tag>(static_cast<float>(lhs) + rhs);
 }
 
-template <size_t N, size_t K>
-bool operator<(const Fixed<N, K>& a, double b) {
-    return static_cast<double>(a) < b;
+template <size_t N, size_t K, typename Tag>
+FixedPoint<N, K, Tag> operator-(const FixedPoint<N, K, Tag>& lhs, float rhs) {
+    return FixedPoint<N, K, Tag>(static_cast<float>(lhs) - rhs);
 }
 
-template <size_t N, size_t K>
-bool operator>=(const Fixed<N, K>& a, double b) {
-    return static_cast<double>(a) >= b;
+template <size_t N, size_t K, typename Tag>
+FixedPoint<N, K, Tag> operator*(const FixedPoint<N, K, Tag>& lhs, float rhs) {
+    return FixedPoint<N, K, Tag>(static_cast<float>(lhs) * rhs);
 }
 
-template <size_t N, size_t K>
-bool operator<=(const Fixed<N, K>& a, double b) {
-    return static_cast<double>(a) <= b;
+template <size_t N, size_t K, typename Tag>
+FixedPoint<N, K, Tag> operator/(const FixedPoint<N, K, Tag>& lhs, float rhs) {
+    return FixedPoint<N, K, Tag>(static_cast<float>(lhs) / rhs);
 }
 
-template <size_t N, size_t K>
-bool operator==(const Fixed<N, K>& a, double b) {
-    return static_cast<double>(a) == b;
+template <size_t N, size_t K, typename Tag>
+FixedPoint<N, K, Tag> operator+(float lhs, const FixedPoint<N, K, Tag>& rhs) {
+    return FixedPoint<N, K, Tag>(lhs + static_cast<float>(rhs));
 }
 
-template <size_t N, size_t K>
-bool operator!=(const Fixed<N, K>& a, double b) {
-    return static_cast<double>(a) != b;
+template <size_t N, size_t K, typename Tag>
+FixedPoint<N, K, Tag> operator-(float lhs, const FixedPoint<N, K, Tag>& rhs) {
+    return FixedPoint<N, K, Tag>(lhs - static_cast<float>(rhs));
 }
 
-template <size_t N, size_t K>
-Fixed<N, K> operator*(const Fixed<N, K>& a, double b) {
-    return Fixed<N, K>(static_cast<double>(a) * b);
+template <size_t N, size_t K, typename Tag>
+FixedPoint<N, K, Tag> operator*(float lhs, const FixedPoint<N, K, Tag>& rhs) {
+    return FixedPoint<N, K, Tag>(lhs * static_cast<float>(rhs));
 }
 
-template <size_t N, size_t K>
-Fixed<N, K> operator/(const Fixed<N, K>& a, double b) {
-    return Fixed<N, K>(static_cast<double>(a) / b);
+template <size_t N, size_t K, typename Tag>
+FixedPoint<N, K, Tag> operator/(float lhs, const FixedPoint<N, K, Tag>& rhs) {
+    return FixedPoint<N, K, Tag>(lhs / static_cast<float>(rhs));
 }
 
-template <size_t N, size_t K>
-Fixed<N, K>& operator*=(Fixed<N, K>& a, double b) {
-    a = static_cast<double>(a) * b;
-    return a;
+
+template <size_t N, size_t K, typename Tag>
+FixedPoint<N, K, Tag> operator+(const FixedPoint<N, K, Tag>& lhs, int rhs) {
+    return lhs + FixedPoint<N, K, Tag>(rhs);
 }
 
-template <size_t N, size_t K>
-Fixed<N, K>& operator/=(Fixed<N, K>& a, double b) {
-    a = static_cast<double>(a) / b;
-    return a;
+template <size_t N, size_t K, typename Tag>
+FixedPoint<N, K, Tag> operator+(int lhs, const FixedPoint<N, K, Tag>& rhs) {
+    return FixedPoint<N, K, Tag>(lhs) + rhs;
+}
+
+// Subtraction with integral types
+template <size_t N, size_t K, typename Tag>
+FixedPoint<N, K, Tag> operator-(const FixedPoint<N, K, Tag>& lhs, int rhs) {
+    return lhs - FixedPoint<N, K, Tag>(rhs);
+}
+
+template <size_t N, size_t K, typename Tag>
+FixedPoint<N, K, Tag> operator-(int lhs, const FixedPoint<N, K, Tag>& rhs) {
+    return FixedPoint<N, K, Tag>(lhs) - rhs;
+}
+
+// Multiplication with integral types
+template <size_t N, size_t K, typename Tag>
+FixedPoint<N, K, Tag> operator*(const FixedPoint<N, K, Tag>& lhs, int rhs) {
+    return lhs * FixedPoint<N, K, Tag>(rhs);
+}
+
+template <size_t N, size_t K, typename Tag>
+FixedPoint<N, K, Tag> operator*(int lhs, const FixedPoint<N, K, Tag>& rhs) {
+    return FixedPoint<N, K, Tag>(lhs) * rhs;
+}
+
+// Division with integral types
+template <size_t N, size_t K, typename Tag>
+FixedPoint<N, K, Tag> operator/(const FixedPoint<N, K, Tag>& lhs, int rhs) {
+    return lhs / FixedPoint<N, K, Tag>(rhs);
+}
+
+template <size_t N, size_t K, typename Tag>
+FixedPoint<N, K, Tag> operator/(int lhs, const FixedPoint<N, K, Tag>& rhs) {
+    return FixedPoint<N, K, Tag>(lhs) / rhs;
+}
+
+template <size_t N, size_t K, typename Tag>
+double operator-(double lhs, const FixedPoint<N, K, Tag>& rhs) {
+    return lhs - static_cast<double>(rhs);
+}
+
+// Деление
+template <size_t N, size_t K, typename Tag>
+double operator/(const FixedPoint<N, K, Tag>& lhs, double rhs) {
+    return static_cast<double>(lhs) / rhs;
+}
+
+template <size_t N, size_t K, typename Tag>
+double operator/(double lhs, const FixedPoint<N, K, Tag>& rhs) {
+    return lhs / static_cast<double>(rhs);
+}
+
+template <size_t N, size_t K, typename Tag>
+bool operator<=(const FIXED<N, K>& lhs, double rhs) {
+    return static_cast<double>(lhs) <= rhs;
+}
+
+template <size_t N, size_t K, typename Tag>
+bool operator<=(double lhs, const FIXED<N, K>& rhs) {
+    return lhs <= static_cast<double>(rhs);
+}
+
+template <size_t N, size_t K, typename Tag>
+inline bool operator<=(const FixedPoint<N, K, Tag>& lhs, double rhs) {
+    return static_cast<double>(lhs) <= rhs;
+}
+
+template <size_t N, size_t K, typename Tag>
+inline bool operator<=(double lhs, const FixedPoint<N, K, Tag>& rhs) {
+    return lhs <= static_cast<double>(rhs);
 }
