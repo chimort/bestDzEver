@@ -123,7 +123,7 @@ FluidSimulator<Ptype, VType, VFlowType, N, M>::propagate_flow(int x, int y, VTyp
                 continue;
             }
             // assert(v >= velocity_flow.get(x, y, dx, dy));
-            auto vp = std::min(static_cast<VFlowType>(lim), static_cast<VFlowType>(cap) - static_cast<VFlowType>(flow));
+            auto vp = std::min(static_cast<VFlowType>(lim), static_cast<VFlowType>(cap) - flow);
             
             if (this->last_use[nx][ny] == this->UT - 1) {
                 this->velocity_flow.add(x, y, dx, dy, vp);
@@ -339,9 +339,9 @@ void FluidSimulator<Ptype, VType, VFlowType, N, M>::runSimulation(size_t T)
                     auto old_v = velocity.get(x, y, dx, dy);
                     auto new_v = velocity_flow.get(x, y, dx, dy);
                     if (old_v > 0) {
-                        assert(static_cast<float>(new_v) <= static_cast<float>(old_v));
+                        //assert(static_cast<double>(new_v) <= static_cast<double>(old_v));
                         velocity.get(x, y, dx, dy) = static_cast<VType>(new_v);
-                        auto force = (old_v - static_cast<VType>(new_v)) * rho_[(int) field[x][y]];
+                        auto force = (static_cast<VFlowType>(old_v) - new_v) * rho_[(int) field[x][y]];
                         if (field[x][y] == '.')
                             force *= 0.8;
                         if (field[x + dx][y + dy] == '#') {

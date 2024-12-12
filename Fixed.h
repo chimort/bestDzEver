@@ -228,11 +228,11 @@ operator-(const FixedPoint<N1, K1, Tag1>& lhs, const FixedPoint<N2, K2, Tag2>& r
 }
 
 template <size_t N1, size_t K1, typename Tag1, size_t N2, size_t K2, typename Tag2>
-constexpr std::enable_if_t<!(N1 == N2 && K1 == K2 && std::is_same_v<Tag1, Tag2>), FixedPoint<(N1 + N2), (K1 + K2)>>
+constexpr std::enable_if_t<!(N1 == N2 && K1 == K2 && std::is_same_v<Tag1, Tag2>), FixedPoint<(N1 > N2 ? N1 : N2), (K1 > K2 ? K1 : K2)>>
 operator*(const FixedPoint<N1, K1, Tag1>& lhs, const FixedPoint<N2, K2, Tag2>& rhs) {
     double product = static_cast<double>(lhs) * static_cast<double>(rhs);
-    constexpr size_t NewN = N1 + N2;
-    constexpr size_t NewK = K1 + K2;
+    constexpr size_t NewN = (N1 > N2 ? N1 : N2);
+    constexpr size_t NewK = (K1 > K2 ? K1 : K2);
     return FixedPoint<NewN, NewK>(product);
 }
 
