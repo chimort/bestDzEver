@@ -10,8 +10,6 @@
 #include <cstring>
 
 #include "Fixed.h"
-#include "FastFixed.h"
-#include "FixedConv.h"
 #include "deltas.h"
 
 
@@ -77,8 +75,8 @@ private:
         "#                                                                                  #",
         "####################################################################################",
     };
-    Ptype rho_[256] {};
-    Ptype g_;
+    VType rho_[256] {};
+    VType g_;
     int dirs[N][M]{};
     Ptype p[N][M]{}, old_p[N][M]{};
 
@@ -102,7 +100,7 @@ private:
     
     void readInputFile(const std::string& filename);
 
-    std::tuple<Ptype, bool, std::pair<int, int>> propagate_flow(int x, int y, Ptype lim);
+    std::tuple<VType, bool, std::pair<int, int>> propagate_flow(int x, int y, VType lim);
     double random01();
     void propagate_stop(int x, int y, bool force = false);
     Ptype move_prob(int x, int y); 
@@ -111,11 +109,11 @@ private:
 };
 
 template<typename Ptype, typename VType, typename VFlowType, size_t N, size_t M>
-std::tuple<Ptype, bool, std::pair<int, int>> 
-FluidSimulator<Ptype, VType, VFlowType, N, M>::propagate_flow(int x, int y, Ptype lim)  
+std::tuple<VType, bool, std::pair<int, int>> 
+FluidSimulator<Ptype, VType, VFlowType, N, M>::propagate_flow(int x, int y, VType lim)  
 {
     this->last_use[x][y] = this->UT - 1;
-    Ptype ret = 0;
+    VType ret = 0;
     for (auto [dx, dy] : deltas) {
         int nx = x + dx, ny = y + dy;
         if (this->field[nx][ny] != '#' && this->last_use[nx][ny] < this->UT) {
@@ -125,7 +123,7 @@ FluidSimulator<Ptype, VType, VFlowType, N, M>::propagate_flow(int x, int y, Ptyp
                 continue;
             }
             // assert(v >= velocity_flow.get(x, y, dx, dy));
-            auto vp = std::min(lim, cap - flow);
+            auto vp = std::min(static_cast<VFlowType>(lim), static_cast<VFlowType>(cap - flow));
             if (this->last_use[nx][ny] == this->UT - 1) {
                 this->velocity_flow.add(x, y, dx, dy, vp);
                 this->last_use[x][y] = this->UT;
@@ -263,6 +261,7 @@ void FluidSimulator<Ptype, VType, VFlowType, N, M>::runSimulation(size_t T)
     rho_[' '] = 0.01;
     rho_['.'] = 1000;
     g_ = 0.1;
+    
     for (size_t x = 0; x < N; ++x) {
             for (size_t y = 0; y < M; ++y) {
                 if (field[x][y] == '#')
@@ -298,7 +297,7 @@ void FluidSimulator<Ptype, VType, VFlowType, N, M>::runSimulation(size_t T)
                         auto delta_p = old_p[x][y] - old_p[nx][ny];
                         auto force = delta_p;
                         auto &contr = velocity.get(nx, ny, -dx, -dy);
-                        if (contr * rho_[(int) field[nx][ny]] >= force) {
+                        if (force <= contr * rho_[(int) field[nx][ny]]) {
                             contr -= force / rho_[(int) field[nx][ny]];
                             continue;
                         }
@@ -370,7 +369,6 @@ void FluidSimulator<Ptype, VType, VFlowType, N, M>::runSimulation(size_t T)
                 }
             }
         }
-
         if (prop) {
             std::cout << "Tick " << i << ":\n";
             for (size_t x = 0; x < N; ++x) {
@@ -378,4 +376,5 @@ void FluidSimulator<Ptype, VType, VFlowType, N, M>::runSimulation(size_t T)
             }
         }
     }
+    std::cout << "end" << std::endl;
 }

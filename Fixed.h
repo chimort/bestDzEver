@@ -49,6 +49,12 @@ struct FixedPoint {
     // Конструкторы
     FixedPoint() : v(0) {}
 
+        friend std::ostream& operator<<(std::ostream& os, const FixedPoint& fp) {
+        // Используем существующий оператор преобразования к double
+        os << static_cast<double>(fp);
+        return os;
+        }
+
     constexpr FixedPoint(int32_t value) 
         : v(static_cast<StorageType>(value) << K) {}
 
@@ -100,7 +106,6 @@ public:
     auto operator<=>(const FixedPoint&) const = default;
     bool operator==(const FixedPoint&) const = default;
     FixedPoint& operator=(const FixedPoint& other) = default;
-    constexpr FixedPoint(const FixedPoint& other) = default;
 
     // Арифметические операторы
     FixedPoint operator+(const FixedPoint& other) const {
@@ -189,7 +194,13 @@ constexpr bool operator>(const FixedPoint<N1, K1, Tag1>& lhs, const FixedPoint<N
 
 template <size_t N1, size_t K1, typename Tag1, size_t N2, size_t K2, typename Tag2>
 constexpr bool operator==(const FixedPoint<N1, K1, Tag1>& lhs, const FixedPoint<N2, K2, Tag2>& rhs) {
-    return static_cast<double>(lhs) == static_cast<double>(rhs);
+    if constexpr (K1 > K2) {
+        return lhs.v == (rhs.v << (K1 - K2));
+    } else if constexpr (K2 > K1) {
+        return (lhs.v << (K2 - K1)) == rhs.v;
+    } else {
+        return lhs.v == rhs.v;
+    }
 }
 
 template <size_t N1, size_t K1, typename Tag1, size_t N2, size_t K2, typename Tag2>
@@ -208,7 +219,7 @@ operator+(const FixedPoint<N1, K1, Tag1>& lhs, const FixedPoint<N2, K2, Tag2>& r
 }
 
 template <size_t N1, size_t K1, typename Tag1, size_t N2, size_t K2, typename Tag2>
-constexpr FixedPoint<(N1 > N2 ? N1 : N2), (K1 > K2 ? K1 : K2)>
+constexpr std::enable_if_t<!(N1 == N2 && K1 == K2 && std::is_same_v<Tag1, Tag2>), FixedPoint<(N1 > N2 ? N1 : N2), (K1 > K2 ? K1 : K2)>>
 operator-(const FixedPoint<N1, K1, Tag1>& lhs, const FixedPoint<N2, K2, Tag2>& rhs) {
     double diff = static_cast<double>(lhs) - static_cast<double>(rhs);
     constexpr size_t NewN = (N1 > N2 ? N1 : N2);
