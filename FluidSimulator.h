@@ -123,17 +123,18 @@ FluidSimulator<Ptype, VType, VFlowType, N, M>::propagate_flow(int x, int y, VTyp
                 continue;
             }
             // assert(v >= velocity_flow.get(x, y, dx, dy));
-            auto vp = std::min(static_cast<VFlowType>(lim), static_cast<VFlowType>(cap - flow));
+            auto vp = std::min(static_cast<VFlowType>(lim), static_cast<VFlowType>(cap) - static_cast<VFlowType>(flow));
+            
             if (this->last_use[nx][ny] == this->UT - 1) {
                 this->velocity_flow.add(x, y, dx, dy, vp);
                 this->last_use[x][y] = this->UT;
                 // cerr << x << " " << y << " -> " << nx << " " << ny << " " << vp << " / " << lim << "\n";
-                return {vp, 1, {nx, ny}};
+                return {static_cast<VType>(vp), 1, {nx, ny}};
             }
-            auto [t, prop, end] = this->propagate_flow(nx, ny, vp);
+            auto [t, prop, end] = this->propagate_flow(nx, ny, static_cast<VType>(vp));
             ret += t;
             if (prop) {
-                this->velocity_flow.add(x, y, dx, dy, t);
+                this->velocity_flow.add(x, y, dx, dy, static_cast<VFlowType>(t));
                 this->last_use[x][y] = this->UT;
                 // cerr << x << " " << y << " -> " << nx << " " << ny << " " << t << " / " << lim << "\n";
                 return {t, prop && end != std::make_pair(x, y), end};
@@ -298,12 +299,12 @@ void FluidSimulator<Ptype, VType, VFlowType, N, M>::runSimulation(size_t T)
                         auto force = delta_p;
                         auto &contr = velocity.get(nx, ny, -dx, -dy);
                         if (force <= contr * rho_[(int) field[nx][ny]]) {
-                            contr -= force / rho_[(int) field[nx][ny]];
+                            contr -= static_cast<VType>(static_cast<VType>(force) / rho_[(int) field[nx][ny]]);
                             continue;
                         }
                         force -= contr * rho_[(int) field[nx][ny]];
                         contr = 0;
-                        velocity.add(x, y, dx, dy, force / rho_[(int) field[x][y]]);
+                        velocity.add(x, y, dx, dy, static_cast<VType>(force) / rho_[(int) field[x][y]]);
                         p[x][y] -= force / dirs[x][y];
                         total_delta_p -= force / dirs[x][y];
                     }
@@ -338,9 +339,9 @@ void FluidSimulator<Ptype, VType, VFlowType, N, M>::runSimulation(size_t T)
                     auto old_v = velocity.get(x, y, dx, dy);
                     auto new_v = velocity_flow.get(x, y, dx, dy);
                     if (old_v > 0) {
-                        assert(new_v <= old_v);
-                        velocity.get(x, y, dx, dy) = new_v;
-                        auto force = (old_v - new_v) * rho_[(int) field[x][y]];
+                        assert(static_cast<float>(new_v) <= static_cast<float>(old_v));
+                        velocity.get(x, y, dx, dy) = static_cast<VType>(new_v);
+                        auto force = (old_v - static_cast<VType>(new_v)) * rho_[(int) field[x][y]];
                         if (field[x][y] == '.')
                             force *= 0.8;
                         if (field[x + dx][y + dy] == '#') {

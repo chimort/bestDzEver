@@ -1,16 +1,22 @@
+// main.cpp
+
 #include "FluidSimulator.h"
+//#include "Fixed.h"
 
 
 int main() {
-    // Define the Fixed types with 32 bits and 16 fractional bits
-    using FixedType = FAST_FIXED<64, 16>;
-    //template class FluidSimulator<Fixed<32, 16>, Fixed<32, 16>, Fixed<32, 16>, 36, 84>;
-    // Create an instance of FluidSimulator with Fixed<32, 16> for Ptype, VType, and VFlowType
-    FluidSimulator<FAST_FIXED<64, 16>, Fixed<64, 16>, FAST_FIXED<32, 8>, 36, 84> simulator;
+    // Определение типов FIXED и FAST_FIXED
+    using Ptype = FixedPoint<32, 8>;
+    using VType = FixedPoint<32, 16>;
+    using VFlowType = FixedPoint<32, 8>;
 
-    size_t simulationSteps = 10000;
+    // Создание экземпляра FluidSimulator
+    FluidSimulator<VFlowType, VType, float, 36, 84> simulator;
 
-    // Run the simulation
+
+    size_t simulationSteps = 1000;
+
+    // Запуск симуляции
     simulator.runSimulation(simulationSteps);
 
     return 0;

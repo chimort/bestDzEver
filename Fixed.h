@@ -324,6 +324,17 @@ FixedPoint<N, K, Tag> operator/(float lhs, const FixedPoint<N, K, Tag>& rhs) {
     return FixedPoint<N, K, Tag>(lhs / static_cast<float>(rhs));
 }
 
+template <size_t N, size_t K, typename Tag>
+float operator+=(float& lhs, const FixedPoint<N, K, Tag>& rhs) {
+    lhs += static_cast<float>(rhs);
+    return lhs;
+}
+
+template <size_t N, size_t K, typename Tag>
+float operator-=(float& lhs, const FixedPoint<N, K, Tag>& rhs) {
+    lhs -= static_cast<float>(rhs);
+    return lhs;
+}
 
 template <size_t N, size_t K, typename Tag>
 FixedPoint<N, K, Tag> operator+(const FixedPoint<N, K, Tag>& lhs, int rhs) {
