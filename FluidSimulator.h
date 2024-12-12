@@ -8,6 +8,9 @@
 #include <tuple>         
 #include <utility>  
 #include <cstring>
+#include <fstream>
+#include <sstream>
+#include <unistd.h>
 
 #include "Fixed.h"
 #include "deltas.h"
@@ -255,13 +258,104 @@ bool FluidSimulator<Ptype, VType, VFlowType, N, M>::propagate_move(int x, int y,
     return ret;
 }
 
+template<typename Ptype, typename VType, typename VFlowType, size_t N, size_t M>
+void FluidSimulator<Ptype, VType, VFlowType, N, M>::readInputFile(const std::string& filename)
+{
+    std::ifstream file(filename);
+    if (!file.is_open()) {
+        std::cerr << "Не удалось открыть файл: " << filename << std::endl;
+        char cwd[1024];
+        if (getcwd(cwd, sizeof(cwd)) != NULL) {
+            std::cerr << "Текущий рабочий каталог: " << cwd << std::endl;
+        } else {
+            perror("getcwd() ошибка");
+        }
+        exit(1);
+        return;
+    }
+
+    std::string line;
+    bool in_rho = false;
+
+    while (std::getline(file, line)) {
+        line.erase(line.begin(), std::find_if(line.begin(), line.end(), [](unsigned char ch) { return !std::isspace(ch); }));
+        line.erase(std::find_if(line.rbegin(), line.rend(), [](unsigned char ch) { return !std::isspace(ch); }).base(), line.end());
+
+        if (line.find("\"rho\":") != std::string::npos) {
+            in_rho = true;
+            continue;
+        }
+
+        if (in_rho) {
+            if (line.find("}") != std::string::npos) {
+                in_rho = false;
+                continue;
+            }
+
+            size_t first_quote = line.find('\"');
+            if (first_quote == std::string::npos) continue;
+            size_t second_quote = line.find('\"', first_quote + 1);
+            if (second_quote == std::string::npos) continue;
+
+            std::string key = line.substr(first_quote + 1, second_quote - first_quote - 1);
+
+            size_t colon = line.find(':', second_quote);
+            if (colon == std::string::npos) continue;
+
+            size_t comma = line.find(',', colon);
+            std::string value_str;
+            if (comma != std::string::npos)
+                value_str = line.substr(colon + 1, comma - colon - 1);
+            else
+                value_str = line.substr(colon + 1);
+
+            value_str.erase(value_str.begin(), std::find_if(value_str.begin(), value_str.end(), [](unsigned char ch) { return !std::isspace(ch); }));
+            value_str.erase(std::find_if(value_str.rbegin(), value_str.rend(), [](unsigned char ch) { return !std::isspace(ch); }).base(), value_str.end());
+
+            try {
+                double value = std::stod(value_str);
+                if (key.length() != 1) {
+                    std::cerr << "Ключ rho должен быть одним символом: " << key << std::endl;
+                    continue;
+                }
+                char c = key[0];
+                rho_[static_cast<unsigned char>(c)] = static_cast<VType>(value);
+            }
+            catch (const std::exception& e) {
+                std::cerr << "Ошибка при парсинге значения для rho: " << e.what() << std::endl;
+            }
+
+            continue; 
+        }
+
+        if (line.find("\"g\"") != std::string::npos) {
+            size_t colon = line.find(':');
+            if (colon != std::string::npos) {
+                size_t comma = line.find(',', colon);
+                std::string g_str;
+                if (comma != std::string::npos)
+                    g_str = line.substr(colon + 1, comma - colon - 1);
+                else
+                    g_str = line.substr(colon + 1);
+                g_str.erase(g_str.begin(), std::find_if(g_str.begin(), g_str.end(), [](unsigned char ch) { return !std::isspace(ch); }));
+                g_str.erase(std::find_if(g_str.rbegin(), g_str.rend(), [](unsigned char ch) { return !std::isspace(ch); }).base(), g_str.end());
+
+                try {
+                    g_ = std::stod(g_str);
+                }
+                catch (const std::exception& e) {
+                    std::cerr << "Ошибка при парсинге значения для g: " << e.what() << std::endl;
+                }
+            }
+        }
+    }
+
+}
 
 template<typename Ptype, typename VType, typename VFlowType, size_t N, size_t M>
 void FluidSimulator<Ptype, VType, VFlowType, N, M>::runSimulation(size_t T)
 {
-    rho_[' '] = 0.01;
-    rho_['.'] = 1000;
-    g_ = 0.1;
+    readInputFile("../input.json");
     
     for (size_t x = 0; x < N; ++x) {
             for (size_t y = 0; y < M; ++y) {
