@@ -11,6 +11,7 @@
 #include <fstream>
 #include <sstream>
 #include <unistd.h>
+#include <iomanip>
 
 #include "Fixed.h"
 #include "deltas.h"
@@ -40,44 +41,7 @@ public:
     void runSimulation(size_t T);
 
 private:
-    char field[N][M + 1] = {
-        "####################################################################################",
-        "#                                                                                  #",
-        "#                                                                                  #",
-        "#                                                                                  #",
-        "#                                                                                  #",
-        "#                                                                                  #",
-        "#                                       .........                                  #",
-        "#..............#            #           .........                                  #",
-        "#..............#            #           .........                                  #",
-        "#..............#            #           .........                                  #",
-        "#..............#            #                                                      #",
-        "#..............#            #                                                      #",
-        "#..............#            #                                                      #",
-        "#..............#            #                                                      #",
-        "#..............#............#                                                      #",
-        "#..............#............#                                                      #",
-        "#..............#............#                                                      #",
-        "#..............#............#                                                      #",
-        "#..............#............#                                                      #",
-        "#..............#............#                                                      #",
-        "#..............#............#                                                      #",
-        "#..............#............#                                                      #",
-        "#..............#............################                     #                 #",
-        "#...........................#....................................#                 #",
-        "#...........................#....................................#                 #",
-        "#...........................#....................................#                 #",
-        "##################################################################                 #",
-        "#                                                                                  #",
-        "#                                                                                  #",
-        "#                                                                                  #",
-        "#                                                                                  #",
-        "#                                                                                  #",
-        "#                                                                                  #",
-        "#                                                                                  #",
-        "#                                                                                  #",
-        "####################################################################################",
-    };
+    char field[N][M + 1];
     VType rho_[256] {};
     VType g_;
     int dirs[N][M]{};
@@ -102,6 +66,7 @@ private:
     };
     
     void readInputFile(const std::string& filename);
+    void saveOutputFile(const std::string& filename) const;
 
     std::tuple<VType, bool, std::pair<int, int>> propagate_flow(int x, int y, VType lim);
     double random01();
@@ -275,81 +240,154 @@ void FluidSimulator<Ptype, VType, VFlowType, N, M>::readInputFile(const std::str
     }
 
     std::string line;
-    bool in_rho = false;
+    enum class Section { NONE, RHO, FIELD } current_section = Section::NONE;
+    size_t field_row = 0;
 
     while (std::getline(file, line)) {
         line.erase(line.begin(), std::find_if(line.begin(), line.end(), [](unsigned char ch) { return !std::isspace(ch); }));
         line.erase(std::find_if(line.rbegin(), line.rend(), [](unsigned char ch) { return !std::isspace(ch); }).base(), line.end());
 
-        if (line.find("\"rho\":") != std::string::npos) {
-            in_rho = true;
+        if (line.empty())
+            continue;
+
+        if (line.find("\"g\"") != std::string::npos && line.find(":") != std::string::npos) {
+            size_t colon = line.find(':');
+            std::string g_str = line.substr(colon + 1);
+            g_str.erase(std::remove(g_str.begin(), g_str.end(), ','), g_str.end());
+            g_str.erase(std::remove_if(g_str.begin(), g_str.end(), ::isspace), g_str.end());
+            try {
+                g_ = std::stod(g_str);
+            }
+            catch (const std::exception& e) {
+                std::cerr << "Ошибка при парсинге значения для g: " << e.what() << std::endl;
+            }
             continue;
         }
 
-        if (in_rho) {
+        if (line.find("\"rho\"") != std::string::npos && line.find("{") != std::string::npos) {
+            current_section = Section::RHO;
+            continue;
+        }
+
+        if (line.find("\"field\"") != std::string::npos && line.find("[") != std::string::npos) {
+            current_section = Section::FIELD;
+            field_row = 0;
+            continue;
+        }
+
+        if (current_section == Section::RHO) {
             if (line.find("}") != std::string::npos) {
-                in_rho = false;
+                current_section = Section::NONE;
+                continue;
+            }
+
+            size_t colon = line.find(':');
+            if (colon != std::string::npos && colon >= 1) {
+                size_t first_quote = line.find('\"');
+                size_t second_quote = line.find('\"', first_quote + 1);
+                if (first_quote == std::string::npos || second_quote == std::string::npos) {
+                    std::cerr << "Неверный формат ключа в rho. \n в ТЗ нет четкого формата, поэтому смотрите input.json из githun" << std::endl;
+                    continue;
+                }
+                char key = line[first_quote + 1];
+
+                std::string value_str = line.substr(colon + 1);
+                value_str.erase(std::remove(value_str.begin(), value_str.end(), ','), value_str.end());
+                value_str.erase(std::remove_if(value_str.begin(), value_str.end(), ::isspace), value_str.end());
+
+                try {
+                    double value = std::stod(value_str);
+                    rho_[static_cast<unsigned char>(key)] = static_cast<VType>(value);
+                }
+                catch (const std::exception& e) {
+                    std::cerr << "Ошибка при парсинге значения для rho: " << e.what() << std::endl;
+                }
+            }
+            continue;
+        }
+
+        if (current_section == Section::FIELD) {
+            if (line.find("]") != std::string::npos) {
+                current_section = Section::NONE;
                 continue;
             }
 
             size_t first_quote = line.find('\"');
-            if (first_quote == std::string::npos) continue;
             size_t second_quote = line.find('\"', first_quote + 1);
-            if (second_quote == std::string::npos) continue;
-
-            std::string key = line.substr(first_quote + 1, second_quote - first_quote - 1);
-
-            size_t colon = line.find(':', second_quote);
-            if (colon == std::string::npos) continue;
-
-            size_t comma = line.find(',', colon);
-            std::string value_str;
-            if (comma != std::string::npos)
-                value_str = line.substr(colon + 1, comma - colon - 1);
-            else
-                value_str = line.substr(colon + 1);
-
-            value_str.erase(value_str.begin(), std::find_if(value_str.begin(), value_str.end(), [](unsigned char ch) { return !std::isspace(ch); }));
-            value_str.erase(std::find_if(value_str.rbegin(), value_str.rend(), [](unsigned char ch) { return !std::isspace(ch); }).base(), value_str.end());
-
-            try {
-                double value = std::stod(value_str);
-                if (key.length() != 1) {
-                    std::cerr << "Ключ rho должен быть одним символом: " << key << std::endl;
-                    continue;
-                }
-                char c = key[0];
-                rho_[static_cast<unsigned char>(c)] = static_cast<VType>(value);
+            if (first_quote == std::string::npos || second_quote == std::string::npos) {
+                std::cerr << "Неверный формат строки в field. \n в ТЗ нет четкого формата, поэтому смотрите input.json из githun" << std::endl;
+                continue;
             }
-            catch (const std::exception& e) {
-                std::cerr << "Ошибка при парсинге значения для rho: " << e.what() << std::endl;
-            }
+            std::string field_line = line.substr(first_quote + 1, second_quote - first_quote - 1);
 
-            continue; 
-        }
-
-        if (line.find("\"g\"") != std::string::npos) {
-            size_t colon = line.find(':');
-            if (colon != std::string::npos) {
-                size_t comma = line.find(',', colon);
-                std::string g_str;
-                if (comma != std::string::npos)
-                    g_str = line.substr(colon + 1, comma - colon - 1);
-                else
-                    g_str = line.substr(colon + 1);
-                g_str.erase(g_str.begin(), std::find_if(g_str.begin(), g_str.end(), [](unsigned char ch) { return !std::isspace(ch); }));
-                g_str.erase(std::find_if(g_str.rbegin(), g_str.rend(), [](unsigned char ch) { return !std::isspace(ch); }).base(), g_str.end());
-
-                try {
-                    g_ = std::stod(g_str);
+            if (field_row < N) {
+                for (size_t y = 0; y < M && y < field_line.size(); ++y) {
+                    field[field_row][y] = field_line[y];
                 }
-                catch (const std::exception& e) {
-                    std::cerr << "Ошибка при парсинге значения для g: " << e.what() << std::endl;
-                }
+                ++field_row;
+            } else {
+                std::cerr << "Превышение размера поля при чтении из файла. \n в ТЗ нет четкого формата, поэтому смотрите input.json из githun" << std::endl;
             }
+            continue;
         }
     }
 
+    file.close();
+}
+
+template<typename Ptype, typename VType, typename VFlowType, size_t N, size_t M>
+void FluidSimulator<Ptype, VType, VFlowType, N, M>::saveOutputFile(const std::string& filename) const
+{
+    std::ofstream out_file(filename);
+    if (!out_file.is_open()) {
+        std::cerr << "Не удалось открыть файл для сохранения: " << filename << std::endl;
+        return;
+    }
+
+    out_file << "{\n";
+
+    out_file << "    \"g\": " << std::setprecision(10) << g_ << ",\n";
+
+    out_file << "    \"rho\": {\n";
+    bool first_rho = true;
+    for (size_t i = 0; i < 256; ++i) {
+        if (rho_[i] != 0) { 
+            if (!first_rho) {
+                out_file << ",\n";
+            }
+            first_rho = false;
+            char key = static_cast<char>(i);
+            std::string key_str;
+            if (key == '\\' || key == '\"') {
+                key_str += '\\';
+            }
+            key_str += key;
+            out_file << "        \"" << key_str << "\": " << std::setprecision(10) << rho_[i];
+        }
+    }
+    out_file << "\n    },\n";
+
+    out_file << "    \"field\": [\n";
+    for (size_t x = 0; x < N; ++x) {
+        out_file << "        \""; 
+        for (size_t y = 0; y < M; ++y) {
+            char c = field[x][y];
+            if (c == '\\' || c == '\"') {
+                out_file << '\\';
+            }
+            out_file << c;
+        }
+        out_file << "\"";
+        if (x != N - 1) {
+            out_file << ",";
+        }
+        out_file << "\n";
+    }
+    out_file << "    ]\n";
+
+    out_file << "}\n";
+
+    out_file.close();
 }
 
 template<typename Ptype, typename VType, typename VFlowType, size_t N, size_t M>
@@ -404,6 +442,11 @@ void FluidSimulator<Ptype, VType, VFlowType, N, M>::runSimulation(size_t T)
                     }
                 }
             }
+        }
+
+        if ((i + 1) % 20 == 0) {
+            std::string output_file = "../output.json";
+            saveOutputFile(output_file);
         }
 
         // Make flow from velocities
