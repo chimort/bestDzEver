@@ -8,10 +8,6 @@
 #include <tuple>         
 #include <utility>  
 #include <cstring>
-#include <fstream>
-#include <sstream>
-#include <unistd.h>
-#include <iomanip>
 
 #include "Fixed.h"
 #include "deltas.h"
@@ -41,7 +37,44 @@ public:
     void runSimulation(size_t T);
 
 private:
-    char field[N][M + 1];
+    char field[N][M + 1] = {
+        "####################################################################################",
+        "#                                                                                  #",
+        "#                                                                                  #",
+        "#                                                                                  #",
+        "#                                                                                  #",
+        "#                                                                                  #",
+        "#                                       .........                                  #",
+        "#..............#            #           .........                                  #",
+        "#..............#            #           .........                                  #",
+        "#..............#            #           .........                                  #",
+        "#..............#            #                                                      #",
+        "#..............#            #                                                      #",
+        "#..............#            #                                                      #",
+        "#..............#            #                                                      #",
+        "#..............#............#                                                      #",
+        "#..............#............#                                                      #",
+        "#..............#............#                                                      #",
+        "#..............#............#                                                      #",
+        "#..............#............#                                                      #",
+        "#..............#............#                                                      #",
+        "#..............#............#                                                      #",
+        "#..............#............#                                                      #",
+        "#..............#............################                     #                 #",
+        "#...........................#....................................#                 #",
+        "#...........................#....................................#                 #",
+        "#...........................#....................................#                 #",
+        "##################################################################                 #",
+        "#                                                                                  #",
+        "#                                                                                  #",
+        "#                                                                                  #",
+        "#                                                                                  #",
+        "#                                                                                  #",
+        "#                                                                                  #",
+        "#                                                                                  #",
+        "#                                                                                  #",
+        "####################################################################################",
+    };
     VType rho_[256] {};
     VType g_;
     int dirs[N][M]{};
@@ -64,9 +97,8 @@ private:
             std::swap(fs.velocity.v[x][y], v);
         }
     };
-    
+
     void readInputFile(const std::string& filename);
-    void saveOutputFile(const std::string& filename) const;
 
     std::tuple<VType, bool, std::pair<int, int>> propagate_flow(int x, int y, VType lim);
     double random01();
@@ -92,7 +124,7 @@ FluidSimulator<Ptype, VType, VFlowType, N, M>::propagate_flow(int x, int y, VTyp
             }
             // assert(v >= velocity_flow.get(x, y, dx, dy));
             auto vp = std::min(static_cast<VFlowType>(lim), static_cast<VFlowType>(cap) - flow);
-            
+
             if (this->last_use[nx][ny] == this->UT - 1) {
                 this->velocity_flow.add(x, y, dx, dy, vp);
                 this->last_use[x][y] = this->UT;
@@ -223,178 +255,14 @@ bool FluidSimulator<Ptype, VType, VFlowType, N, M>::propagate_move(int x, int y,
     return ret;
 }
 
-template<typename Ptype, typename VType, typename VFlowType, size_t N, size_t M>
-void FluidSimulator<Ptype, VType, VFlowType, N, M>::readInputFile(const std::string& filename)
-{
-    std::ifstream file(filename);
-    if (!file.is_open()) {
-        std::cerr << "Не удалось открыть файл: " << filename << std::endl;
-        char cwd[1024];
-        if (getcwd(cwd, sizeof(cwd)) != NULL) {
-            std::cerr << "Текущий рабочий каталог: " << cwd << std::endl;
-        } else {
-            perror("getcwd() ошибка");
-        }
-        exit(1);
-        return;
-    }
-
-    std::string line;
-    enum class Section { NONE, RHO, FIELD } current_section = Section::NONE;
-    size_t field_row = 0;
-
-    while (std::getline(file, line)) {
-        line.erase(line.begin(), std::find_if(line.begin(), line.end(), [](unsigned char ch) { return !std::isspace(ch); }));
-        line.erase(std::find_if(line.rbegin(), line.rend(), [](unsigned char ch) { return !std::isspace(ch); }).base(), line.end());
-
-        if (line.empty())
-            continue;
-
-        if (line.find("\"g\"") != std::string::npos && line.find(":") != std::string::npos) {
-            size_t colon = line.find(':');
-            std::string g_str = line.substr(colon + 1);
-            g_str.erase(std::remove(g_str.begin(), g_str.end(), ','), g_str.end());
-            g_str.erase(std::remove_if(g_str.begin(), g_str.end(), ::isspace), g_str.end());
-            try {
-                g_ = std::stod(g_str);
-            }
-            catch (const std::exception& e) {
-                std::cerr << "Ошибка при парсинге значения для g: " << e.what() << std::endl;
-            }
-            continue;
-        }
-
-        if (line.find("\"rho\"") != std::string::npos && line.find("{") != std::string::npos) {
-            current_section = Section::RHO;
-            continue;
-        }
-
-        if (line.find("\"field\"") != std::string::npos && line.find("[") != std::string::npos) {
-            current_section = Section::FIELD;
-            field_row = 0;
-            continue;
-        }
-
-        if (current_section == Section::RHO) {
-            if (line.find("}") != std::string::npos) {
-                current_section = Section::NONE;
-                continue;
-            }
-
-            size_t colon = line.find(':');
-            if (colon != std::string::npos && colon >= 1) {
-                size_t first_quote = line.find('\"');
-                size_t second_quote = line.find('\"', first_quote + 1);
-                if (first_quote == std::string::npos || second_quote == std::string::npos) {
-                    std::cerr << "Неверный формат ключа в rho. \n в ТЗ нет четкого формата, поэтому смотрите input.json из githun" << std::endl;
-                    continue;
-                }
-                char key = line[first_quote + 1];
-
-                std::string value_str = line.substr(colon + 1);
-                value_str.erase(std::remove(value_str.begin(), value_str.end(), ','), value_str.end());
-                value_str.erase(std::remove_if(value_str.begin(), value_str.end(), ::isspace), value_str.end());
-
-                try {
-                    double value = std::stod(value_str);
-                    rho_[static_cast<unsigned char>(key)] = static_cast<VType>(value);
-                }
-                catch (const std::exception& e) {
-                    std::cerr << "Ошибка при парсинге значения для rho: " << e.what() << std::endl;
-                }
-            }
-            continue;
-        }
-
-        if (current_section == Section::FIELD) {
-            if (line.find("]") != std::string::npos) {
-                current_section = Section::NONE;
-                continue;
-            }
-
-            size_t first_quote = line.find('\"');
-            size_t second_quote = line.find('\"', first_quote + 1);
-            if (first_quote == std::string::npos || second_quote == std::string::npos) {
-                std::cerr << "Неверный формат строки в field. \n в ТЗ нет четкого формата, поэтому смотрите input.json из githun" << std::endl;
-                continue;
-            }
-            std::string field_line = line.substr(first_quote + 1, second_quote - first_quote - 1);
-
-            if (field_row < N) {
-                for (size_t y = 0; y < M && y < field_line.size(); ++y) {
-                    field[field_row][y] = field_line[y];
-                }
-                ++field_row;
-            } else {
-                std::cerr << "Превышение размера поля при чтении из файла. \n в ТЗ нет четкого формата, поэтому смотрите input.json из githun" << std::endl;
-            }
-            continue;
-        }
-    }
-
-    file.close();
-}
-
-template<typename Ptype, typename VType, typename VFlowType, size_t N, size_t M>
-void FluidSimulator<Ptype, VType, VFlowType, N, M>::saveOutputFile(const std::string& filename) const
-{
-    std::ofstream out_file(filename);
-    if (!out_file.is_open()) {
-        std::cerr << "Не удалось открыть файл для сохранения: " << filename << std::endl;
-        return;
-    }
-
-    out_file << "{\n";
-
-    out_file << "    \"g\": " << std::setprecision(10) << g_ << ",\n";
-
-    out_file << "    \"rho\": {\n";
-    bool first_rho = true;
-    for (size_t i = 0; i < 256; ++i) {
-        if (rho_[i] != 0) { 
-            if (!first_rho) {
-                out_file << ",\n";
-            }
-            first_rho = false;
-            char key = static_cast<char>(i);
-            std::string key_str;
-            if (key == '\\' || key == '\"') {
-                key_str += '\\';
-            }
-            key_str += key;
-            out_file << "        \"" << key_str << "\": " << std::setprecision(10) << rho_[i];
-        }
-    }
-    out_file << "\n    },\n";
-
-    out_file << "    \"field\": [\n";
-    for (size_t x = 0; x < N; ++x) {
-        out_file << "        \""; 
-        for (size_t y = 0; y < M; ++y) {
-            char c = field[x][y];
-            if (c == '\\' || c == '\"') {
-                out_file << '\\';
-            }
-            out_file << c;
-        }
-        out_file << "\"";
-        if (x != N - 1) {
-            out_file << ",";
-        }
-        out_file << "\n";
-    }
-    out_file << "    ]\n";
-
-    out_file << "}\n";
-
-    out_file.close();
-}
 
 template<typename Ptype, typename VType, typename VFlowType, size_t N, size_t M>
 void FluidSimulator<Ptype, VType, VFlowType, N, M>::runSimulation(size_t T)
 {
-    readInputFile("../input.json");
-    
+    rho_[' '] = 0.01;
+    rho_['.'] = 1000;
+    g_ = 0.1;
+
     for (size_t x = 0; x < N; ++x) {
             for (size_t y = 0; y < M; ++y) {
                 if (field[x][y] == '#')
@@ -406,7 +274,7 @@ void FluidSimulator<Ptype, VType, VFlowType, N, M>::runSimulation(size_t T)
         }
 
     for (size_t i = 0; i < T; ++i) {
-        
+
         Ptype total_delta_p = 0;    
         // Apply external forces
         for (size_t x = 0; x < N; ++x) {
@@ -444,11 +312,6 @@ void FluidSimulator<Ptype, VType, VFlowType, N, M>::runSimulation(size_t T)
             }
         }
 
-        if ((i + 1) % 20 == 0) {
-            std::string output_file = "../output.json";
-            saveOutputFile(output_file);
-        }
-
         // Make flow from velocities
         velocity_flow = {};
         bool prop = false;
@@ -476,6 +339,7 @@ void FluidSimulator<Ptype, VType, VFlowType, N, M>::runSimulation(size_t T)
                     auto old_v = velocity.get(x, y, dx, dy);
                     auto new_v = velocity_flow.get(x, y, dx, dy);
                     if (old_v > 0) {
+                        assert(static_cast<float>(new_v) <= static_cast<float>(old_v));
                         //assert(static_cast<double>(new_v) <= static_cast<double>(old_v));
                         velocity.get(x, y, dx, dy) = static_cast<VType>(new_v);
                         auto force = (static_cast<VFlowType>(old_v) - new_v) * rho_[(int) field[x][y]];
