@@ -52,7 +52,7 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    std::visit([](auto& simulator) { simulator.runSimulation(500); }, arr[it->second]);
+    std::visit([](auto& simulator) { simulator.runSimulation(500, 50); }, arr[it->second]);
 
     return 0;
 }

@@ -8,6 +8,8 @@
 #include <tuple>         
 #include <utility>  
 #include <cstring>
+#include <ostream>
+#include <fstream> 
 
 #include "Fixed.h"
 #include "deltas.h"
@@ -34,7 +36,7 @@ class FluidSimulator {
 public:
 
     FluidSimulator() = default;
-    void runSimulation(size_t T);
+    void runSimulation(size_t T, size_t save_count);
 
 private:
     char field[N][M + 1] = {
@@ -105,6 +107,7 @@ private:
     void propagate_stop(int x, int y, bool force = false);
     Ptype move_prob(int x, int y); 
     bool propagate_move(int x, int y, bool is_first);
+    void saveToJson(const std::string& filename) const;
 
 };
 
@@ -255,9 +258,41 @@ bool FluidSimulator<Ptype, VType, VFlowType, N, M>::propagate_move(int x, int y,
     return ret;
 }
 
+template<typename Ptype, typename VType, typename VFlowType, size_t N, size_t M>
+void FluidSimulator<Ptype, VType, VFlowType, N, M>::saveToJson(const std::string& filename) const {
+    std::ofstream file(filename);
+    if (!file.is_open()) {
+        std::cerr << "Не удалось открыть файл для записи: " << filename << std::endl;
+        return;
+    }
+
+    file << "{\n";  
+    
+    file << "  \"g\": " << g_ << ",\n";
+
+    file << "  \"rho\": {\n";
+    file << "    \" \": " << rho_[' '] << ",\n";
+    file << "    \".\": " << rho_['.'] << "\n";
+    file << "  },\n";
+
+    file << "  \"field\": [\n";
+    for (size_t i = 0; i < N; ++i) {
+        file << "    \"" << field[i] << "\"";
+        if (i != N - 1)
+            file << ",";
+        file << "\n";
+    }
+    file << "  ]\n";
+
+    file << "}\n";
+
+    file.close();
+
+}
+
 
 template<typename Ptype, typename VType, typename VFlowType, size_t N, size_t M>
-void FluidSimulator<Ptype, VType, VFlowType, N, M>::runSimulation(size_t T)
+void FluidSimulator<Ptype, VType, VFlowType, N, M>::runSimulation(size_t T, size_t save_interval)
 {
     rho_[' '] = 0.01;
     rho_['.'] = 1000;
@@ -371,6 +406,11 @@ void FluidSimulator<Ptype, VType, VFlowType, N, M>::runSimulation(size_t T)
                 }
             }
         }
+        if ((i + 1) % save_interval == 0) {
+            std::string filename = "../output.json";
+            saveToJson(filename);
+        }
+
         if (prop) {
             std::cout << "Tick " << i << ":\n";
             for (size_t x = 0; x < N; ++x) {
