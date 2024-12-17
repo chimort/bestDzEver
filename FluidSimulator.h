@@ -15,8 +15,8 @@
 #include "deltas.h"
 
 
-template<typename T, size_t N = 36, size_t M = 84>
-struct VectorField {
+template<typename T, size_t N = 32, size_t M = 84>
+struct Vectorfield_ {
     std::array<T, deltas.size()> v[N][M];
 
     T& add(int x, int y, int dx, int dy, T dv) {
@@ -39,51 +39,15 @@ public:
     void runSimulation(size_t T, size_t save_count);
 
 private:
-    char field[N][M + 1] = {
-        "####################################################################################",
-        "#                                                                                  #",
-        "#                                                                                  #",
-        "#                                                                                  #",
-        "#                                                                                  #",
-        "#                                                                                  #",
-        "#                                       .........                                  #",
-        "#..............#            #           .........                                  #",
-        "#..............#            #           .........                                  #",
-        "#..............#            #           .........                                  #",
-        "#..............#            #                                                      #",
-        "#..............#            #                                                      #",
-        "#..............#            #                                                      #",
-        "#..............#            #                                                      #",
-        "#..............#............#                                                      #",
-        "#..............#............#                                                      #",
-        "#..............#............#                                                      #",
-        "#..............#............#                                                      #",
-        "#..............#............#                                                      #",
-        "#..............#............#                                                      #",
-        "#..............#............#                                                      #",
-        "#..............#............#                                                      #",
-        "#..............#............################                     #                 #",
-        "#...........................#....................................#                 #",
-        "#...........................#....................................#                 #",
-        "#...........................#....................................#                 #",
-        "##################################################################                 #",
-        "#                                                                                  #",
-        "#                                                                                  #",
-        "#                                                                                  #",
-        "#                                                                                  #",
-        "#                                                                                  #",
-        "#                                                                                  #",
-        "#                                                                                  #",
-        "#                                                                                  #",
-        "####################################################################################",
-    };
     VType rho_[256] {};
     VType g_;
     int dirs[N][M]{};
     Ptype p[N][M]{}, old_p[N][M]{};
 
-    VectorField<VType, N, M> velocity;
-    VectorField<VFlowType, N, M> velocity_flow;
+    std::vector<std::string> field_;
+
+    Vectorfield_<VType, N, M> velocity;
+    Vectorfield_<VFlowType, N, M> velocity_flow;
     int last_use[N][M] {};
     int UT = 0;
     std::mt19937 random_generator_;
@@ -94,7 +58,7 @@ private:
         std::array<VType, deltas.size()> v;
 
         void swap_with(FluidSimulator& fs, int x, int y) {
-            std::swap(fs.field[x][y], type);
+            std::swap(fs.field_[x][y], type);
             std::swap(fs.p[x][y], cur_p);
             std::swap(fs.velocity.v[x][y], v);
         }
@@ -123,20 +87,24 @@ void FluidSimulator<Ptype, VType, VFlowType, N, M>::readInputFile(const std::str
 {
     std::ifstream file(filename);
     if (!file.is_open()) {
-        std::cerr << "Error: Cannot open file " << filename << std::endl;
+        std::cerr << "Ошибка: Не удалось открыть файл " << filename << std::endl;
         return;
     }
 
     std::string line;
+    bool readingfield_ = false;
+
     while (std::getline(file, line)) {
         line = trim(line);
-        
+
         if (line.find("\"g\"") != std::string::npos) {
             size_t pos = line.find(":");
             if (pos != std::string::npos) {
                 g_ = std::stod(trim(line.substr(pos + 1)));
             }
-        } else if (line.find("\"rho\"") != std::string::npos) {
+        }
+        else if (line.find("\"rho\"") != std::string::npos) {
+            // Начало чтения rho
             while (std::getline(file, line)) {
                 line = trim(line);
                 if (line.find("}") != std::string::npos) break;
@@ -146,19 +114,43 @@ void FluidSimulator<Ptype, VType, VFlowType, N, M>::readInputFile(const std::str
                     std::string key = trim(line.substr(0, colonPos));
                     std::string value = trim(line.substr(colonPos + 1));
 
+                    // Удаление кавычек из ключа
                     if (key.front() == '"' && key.back() == '"') {
                         key = key.substr(1, key.size() - 2);
                     }
 
-                    unsigned char idx = key.empty() ? ' ' : key[0];
-                    rho_[idx] = std::stod(value);
+                    char keyChar = key.empty() ? ' ' : key[0];
+                    rho_[keyChar] = std::stod(value);
+                }
+            }
+        }
+        else if (line.find("\"field\"") != std::string::npos) {
+            // Начало чтения поля
+            while (std::getline(file, line)) {
+                line = trim(line);
+                if (line.find("]") != std::string::npos) break; // Конец поля
+
+                // Удаление запятых и кавычек
+                if (!line.empty()) {
+                    if (line.back() == ',') {
+                        line = line.substr(0, line.size() - 1);
+                    }
+
+                    if (line.front() == '"' && line.back() == '"') {
+                        line = line.substr(1, line.size() - 2);
+                    }
+
+                    field_.push_back(line);
                 }
             }
         }
     }
 
     file.close();
+    
+    std::cout << "Поле загружено. Размер: " << field_.size() << " строк." << std::endl;
 }
+
 
 template<typename Ptype, typename VType, typename VFlowType, size_t N, size_t M>
 std::tuple<VType, bool, std::pair<int, int>> 
@@ -168,7 +160,7 @@ FluidSimulator<Ptype, VType, VFlowType, N, M>::propagate_flow(int x, int y, VTyp
     VType ret = 0;
     for (auto [dx, dy] : deltas) {
         int nx = x + dx, ny = y + dy;
-        if (this->field[nx][ny] != '#' && this->last_use[nx][ny] < this->UT) {
+        if (this->field_[nx][ny] != '#' && this->last_use[nx][ny] < this->UT) {
             auto cap = this->velocity.get(x, y, dx, dy);
             auto flow = this->velocity_flow.get(x, y, dx, dy);
             if (flow == cap) {
@@ -211,7 +203,7 @@ void FluidSimulator<Ptype, VType, VFlowType, N, M>::propagate_stop(int x, int y,
         bool stop = true;
         for (auto [dx, dy] : deltas) {
             int nx = x + dx, ny = y + dy;
-            if (field[nx][ny] != '#' && last_use[nx][ny] < UT - 1 && velocity.get(x, y, dx, dy) > 0) {
+            if (field_[nx][ny] != '#' && last_use[nx][ny] < UT - 1 && velocity.get(x, y, dx, dy) > 0) {
                 stop = false;
                 break;
             }
@@ -223,7 +215,7 @@ void FluidSimulator<Ptype, VType, VFlowType, N, M>::propagate_stop(int x, int y,
     last_use[x][y] = UT;
     for (auto [dx, dy] : deltas) {
         int nx = x + dx, ny = y + dy;
-        if (field[nx][ny] == '#' || last_use[nx][ny] == UT || velocity.get(x, y, dx, dy) > 0) {
+        if (field_[nx][ny] == '#' || last_use[nx][ny] == UT || velocity.get(x, y, dx, dy) > 0) {
             continue;
         }
         propagate_stop(nx, ny);
@@ -237,7 +229,7 @@ Ptype FluidSimulator<Ptype, VType, VFlowType, N, M>::move_prob(int x, int y)
     for (size_t i = 0; i < deltas.size(); ++i) {
         auto [dx, dy] = deltas[i];
         int nx = x + dx, ny = y + dy;
-        if (field[nx][ny] == '#' || last_use[nx][ny] == UT) {
+        if (field_[nx][ny] == '#' || last_use[nx][ny] == UT) {
             continue;
         }
         auto v = velocity.get(x, y, dx, dy);
@@ -261,7 +253,7 @@ bool FluidSimulator<Ptype, VType, VFlowType, N, M>::propagate_move(int x, int y,
         for (size_t i = 0; i < deltas.size(); ++i) {
             auto [dx, dy] = deltas[i];
             int nx = x + dx, ny = y + dy;
-            if (field[nx][ny] == '#' || last_use[nx][ny] == UT) {
+            if (field_[nx][ny] == '#' || last_use[nx][ny] == UT) {
                 tres[i] = sum;
                 continue;
             }
@@ -284,7 +276,7 @@ bool FluidSimulator<Ptype, VType, VFlowType, N, M>::propagate_move(int x, int y,
         auto [dx, dy] = deltas[d];
         nx = x + dx;
         ny = y + dy;
-        assert(velocity.get(x, y, dx, dy) > 0 && field[nx][ny] != '#' && last_use[nx][ny] < UT);
+        assert(velocity.get(x, y, dx, dy) > 0 && field_[nx][ny] != '#' && last_use[nx][ny] < UT);
 
         ret = (last_use[nx][ny] == UT - 1 || propagate_move(nx, ny, false));
     } while (!ret);
@@ -292,7 +284,7 @@ bool FluidSimulator<Ptype, VType, VFlowType, N, M>::propagate_move(int x, int y,
     for (size_t i = 0; i < deltas.size(); ++i) {
         auto [dx, dy] = deltas[i];
         int nx = x + dx, ny = y + dy;
-        if (field[nx][ny] != '#' && last_use[nx][ny] < UT - 1 && velocity.get(x, y, dx, dy) < 0) {
+        if (field_[nx][ny] != '#' && last_use[nx][ny] < UT - 1 && velocity.get(x, y, dx, dy) < 0) {
             propagate_stop(nx, ny);
         }
     }
@@ -324,10 +316,10 @@ void FluidSimulator<Ptype, VType, VFlowType, N, M>::saveToJson(const std::string
     file << "    \".\": " << rho_['.'] << "\n";
     file << "  },\n";
 
-    file << "  \"field\": [\n";
-    for (size_t i = 0; i < N; ++i) {
-        file << "    \"" << field[i] << "\"";
-        if (i != N - 1)
+    file << "  \"field_\": [\n";
+    for (size_t i = 0; i < field_.size(); ++i) {
+        file << "    \"" << field_[i] << "\"";
+        if (i != field_.size() - 1)
             file << ",";
         file << "\n";
     }
@@ -349,16 +341,24 @@ void FluidSimulator<Ptype, VType, VFlowType, N, M>::runSimulation(size_t T, size
 
     readInputFile("../input.json");
 
+    if (rho_[' '] == 0 || g_ == 0) {
+        std::cout << "СЛИШКОМ МАЛЕНЬКАЯ ТОЧНОСТЬ, ПЕРЕМЕННЫЕ РАВНЫ 0\n";
+        return;
+    } else if (rho_['.'] <= 0) {
+        std::cout << "СЛИШКОМ МАЛЕНЬКАЯ ТОЧНОСТЬ, ПЕРЕМЕННЫЕ ПЕРЕПОЛНИЛИСЬ\n";
+        return;
+    }
+    
     std::cout << rho_[' '] << std::endl;
     std::cout << rho_['.'] << std::endl;
     std::cout << g_ << std::endl;
 
-    for (size_t x = 0; x < N; ++x) {
-            for (size_t y = 0; y < M; ++y) {
-                if (field[x][y] == '#')
+    for (size_t x = 0; x < field_.size(); ++x) {
+            for (size_t y = 0; y < field_[0].size(); ++y) {
+                if (field_[x][y] == '#')
                     continue;
                 for (auto [dx, dy] : deltas) {
-                    dirs[x][y] += (field[x + dx][y + dy] != '#');
+                    dirs[x][y] += (field_[x + dx][y + dy] != '#');
                 }
             }
         }
@@ -367,34 +367,34 @@ void FluidSimulator<Ptype, VType, VFlowType, N, M>::runSimulation(size_t T, size
 
         Ptype total_delta_p = 0;    
         // Apply external forces
-        for (size_t x = 0; x < N; ++x) {
-            for (size_t y = 0; y < M; ++y) {
-                if (field[x][y] == '#')
+        for (size_t x = 0; x < field_.size(); ++x) {
+            for (size_t y = 0; y < field_[0].size(); ++y) {
+                if (field_[x][y] == '#')
                     continue;
-                if (field[x + 1][y] != '#')
+                if (field_[x + 1][y] != '#')
                     velocity.add(x, y, 1, 0, g_);
             }
         }
 
         // Apply forces from p
         memcpy(this->old_p, this->p, sizeof(this->p));
-        for (size_t x = 0; x < N; ++x) {
-            for (size_t y = 0; y < M; ++y) {
-                if (field[x][y] == '#')
+        for (size_t x = 0; x < field_.size(); ++x) {
+            for (size_t y = 0; y < field_[0].size(); ++y) {
+                if (field_[x][y] == '#')
                     continue;
                 for (auto [dx, dy] : deltas) {
                     int nx = x + dx, ny = y + dy;
-                    if (field[nx][ny] != '#' && old_p[nx][ny] < old_p[x][y]) {
+                    if (field_[nx][ny] != '#' && old_p[nx][ny] < old_p[x][y]) {
                         auto delta_p = old_p[x][y] - old_p[nx][ny];
                         auto force = delta_p;
                         auto &contr = velocity.get(nx, ny, -dx, -dy);
-                        if (force <= contr * rho_[(int) field[nx][ny]]) {
-                            contr -= static_cast<VType>(static_cast<VType>(force) / rho_[(int) field[nx][ny]]);
+                        if (force <= contr * rho_[(int) field_[nx][ny]]) {
+                            contr -= static_cast<VType>(static_cast<VType>(force) / rho_[(int) field_[nx][ny]]);
                             continue;
                         }
-                        force -= contr * rho_[(int) field[nx][ny]];
+                        force -= contr * rho_[(int) field_[nx][ny]];
                         contr = 0;
-                        velocity.add(x, y, dx, dy, static_cast<VType>(force) / rho_[(int) field[x][y]]);
+                        velocity.add(x, y, dx, dy, static_cast<VType>(force) / rho_[(int) field_[x][y]]);
                         p[x][y] -= force / dirs[x][y];
                         total_delta_p -= force / dirs[x][y];
                     }
@@ -408,9 +408,9 @@ void FluidSimulator<Ptype, VType, VFlowType, N, M>::runSimulation(size_t T, size
         do {
             UT += 2;
             prop = 0;
-            for (size_t x = 0; x < N; ++x) {
-                for (size_t y = 0; y < M; ++y) {
-                    if (field[x][y] != '#' && last_use[x][y] != UT) {
+            for (size_t x = 0; x < field_.size(); ++x) {
+                for (size_t y = 0; y < field_[0].size(); ++y) {
+                    if (field_[x][y] != '#' && last_use[x][y] != UT) {
                         auto [t, local_prop, _] = propagate_flow(x, y, 1);
                         if (t > 0) {
                             prop = 1;
@@ -421,9 +421,9 @@ void FluidSimulator<Ptype, VType, VFlowType, N, M>::runSimulation(size_t T, size
         } while (prop);
 
         // Recalculate p with kinetic energy
-        for (size_t x = 0; x < N; ++x) {
-            for (size_t y = 0; y < M; ++y) {
-                if (field[x][y] == '#')
+        for (size_t x = 0; x < field_.size(); ++x) {
+            for (size_t y = 0; y < field_[0].size(); ++y) {
+                if (field_[x][y] == '#')
                     continue;
                 for (auto [dx, dy] : deltas) {
                     auto old_v = velocity.get(x, y, dx, dy);
@@ -432,10 +432,10 @@ void FluidSimulator<Ptype, VType, VFlowType, N, M>::runSimulation(size_t T, size
                         assert(static_cast<float>(new_v) <= static_cast<float>(old_v));
                         //assert(static_cast<double>(new_v) <= static_cast<double>(old_v));
                         velocity.get(x, y, dx, dy) = static_cast<VType>(new_v);
-                        auto force = (static_cast<VFlowType>(old_v) - new_v) * rho_[(int) field[x][y]];
-                        if (field[x][y] == '.')
+                        auto force = (static_cast<VFlowType>(old_v) - new_v) * rho_[(int) field_[x][y]];
+                        if (field_[x][y] == '.')
                             force *= 0.8;
-                        if (field[x + dx][y + dy] == '#') {
+                        if (field_[x + dx][y + dy] == '#') {
                             p[x][y] += force / dirs[x][y];
                             total_delta_p += force / dirs[x][y];
                         } else {
@@ -449,9 +449,9 @@ void FluidSimulator<Ptype, VType, VFlowType, N, M>::runSimulation(size_t T, size
 
         UT += 2;
         prop = false;
-        for (size_t x = 0; x < N; ++x) {
-            for (size_t y = 0; y < M; ++y) {
-                if (field[x][y] != '#' && last_use[x][y] != UT) {
+        for (size_t x = 0; x < field_.size(); ++x) {
+            for (size_t y = 0; y < field_[0].size(); ++y) {
+                if (field_[x][y] != '#' && last_use[x][y] != UT) {
                     if (move_prob(x, y) > random01()) {
                         prop = true;
                         propagate_move(x, y, true);
@@ -468,8 +468,8 @@ void FluidSimulator<Ptype, VType, VFlowType, N, M>::runSimulation(size_t T, size
 
         if (prop) {
             std::cout << "Tick " << i << ":\n";
-            for (size_t x = 0; x < N; ++x) {
-                std::cout << field[x] << "\n";
+            for (size_t x = 0; x < field_.size(); ++x) {
+                std::cout << field_[x] << "\n";
             }
         }
     }
