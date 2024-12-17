@@ -111,6 +111,55 @@ private:
 
 };
 
+std::string trim(const std::string& str) {
+    size_t start = str.find_first_not_of(" \t\n\r");
+    if (start == std::string::npos) return "";
+    size_t end = str.find_last_not_of(" \t\n\r");
+    return str.substr(start, end - start + 1);
+}
+
+template<typename Ptype, typename VType, typename VFlowType, size_t N, size_t M>
+void FluidSimulator<Ptype, VType, VFlowType, N, M>::readInputFile(const std::string& filename)
+{
+    std::ifstream file(filename);
+    if (!file.is_open()) {
+        std::cerr << "Error: Cannot open file " << filename << std::endl;
+        return;
+    }
+
+    std::string line;
+    while (std::getline(file, line)) {
+        line = trim(line);
+        
+        if (line.find("\"g\"") != std::string::npos) {
+            size_t pos = line.find(":");
+            if (pos != std::string::npos) {
+                g_ = std::stod(trim(line.substr(pos + 1)));
+            }
+        } else if (line.find("\"rho\"") != std::string::npos) {
+            while (std::getline(file, line)) {
+                line = trim(line);
+                if (line.find("}") != std::string::npos) break;
+
+                size_t colonPos = line.find(":");
+                if (colonPos != std::string::npos) {
+                    std::string key = trim(line.substr(0, colonPos));
+                    std::string value = trim(line.substr(colonPos + 1));
+
+                    if (key.front() == '"' && key.back() == '"') {
+                        key = key.substr(1, key.size() - 2);
+                    }
+
+                    unsigned char idx = key.empty() ? ' ' : key[0];
+                    rho_[idx] = std::stod(value);
+                }
+            }
+        }
+    }
+
+    file.close();
+}
+
 template<typename Ptype, typename VType, typename VFlowType, size_t N, size_t M>
 std::tuple<VType, bool, std::pair<int, int>> 
 FluidSimulator<Ptype, VType, VFlowType, N, M>::propagate_flow(int x, int y, VType lim)  
@@ -294,9 +343,15 @@ void FluidSimulator<Ptype, VType, VFlowType, N, M>::saveToJson(const std::string
 template<typename Ptype, typename VType, typename VFlowType, size_t N, size_t M>
 void FluidSimulator<Ptype, VType, VFlowType, N, M>::runSimulation(size_t T, size_t save_interval)
 {
-    rho_[' '] = 0.01;
-    rho_['.'] = 1000;
-    g_ = 0.1;
+    // rho_[' '] = 0.01;
+    // rho_['.'] = 1000;
+    // g_ = 0.1;
+
+    readInputFile("../input.json");
+
+    std::cout << rho_[' '] << std::endl;
+    std::cout << rho_['.'] << std::endl;
+    std::cout << g_ << std::endl;
 
     for (size_t x = 0; x < N; ++x) {
             for (size_t y = 0; y < M; ++y) {
