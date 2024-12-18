@@ -4,16 +4,21 @@ project(bestDz)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
-
 function(print_info MESSAGE_TEXT)
     message(STATUS "${MESSAGE_TEXT}")
 endfunction()
 
-
 print_info("\nСОВЕТЫ ПО ИСПОЛЬЗОВАНИЮ")
-print_info("1) МНОГО ТИПОВ ПРИ ГЕНЕРАЦИИ ЛОМАЮТ ПРОГРАММУ ПОТОМУ ЧТО У ВАС НЕ ХВАТИТ ПАМЯТИ НА ЭТО,\n ПОЭТОМУ ЖЕЛАТЕЛЬНО ИСПОЛЬЗОВАТЬ НЕ БОЛЬШЕ 3Х ТИПОВ).")
+print_info("1) МНОГО ТИПОВ ПРИ ГЕНЕРАЦИИ ЛОМАЮТ ПРОГРАММУ ПОТОМУ ЧТО У ВАС НЕ ХВАТИТ ПАМЯТИ НА ЭТО,\n ПОЭТОМУ ЖЕЛАТЕЛЬНО ИСПОЛЬЗОВАТЬ НЕ БОЛЬШЕ 3Х ТИПОВ)\n ИЛИ ПРОСТО РАСШИРИТЬ СТЕК.")
 print_info("2) ТИПЫ С МАЛЕНЬКОЙ ТОЧНОСТЬЮ МОГУТ НЕ РАБОТАТЬ, НО ЭТО УЖЕ ПРОБЛЕМЫ РЕАЛИЗАЦИИ ФИЗИКИ.")
 print_info("3) СЛИШКОМ БОЛЬШИЕ ТИПЫ ТОЖЕ МОГУТ СЛОМАТЬ ПРОГРАММУ, ОПЯТЬ ЖЕ ИЗ-ЗА ИЗНАЧАЛЬНОЙ РЕАЛИЗАЦИИ.\n")
+
+execute_process(
+    COMMAND ulimit -s 67108864
+    RESULT_VARIABLE result
+    ERROR_VARIABLE error
+    OUTPUT_VARIABLE output
+)
 
 if(DEFINED TYPES)
     execute_process(
