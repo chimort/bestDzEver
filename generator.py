@@ -42,7 +42,12 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    std::visit([](auto& simulator) { simulator.runSimulation(500, 50); }, arr[it->second]);
+    size_t T = 500;
+    size_t tick_for_save = 50;
+    std::string input_file = "../input.json";
+    std::visit([&](auto& simulator) { 
+        simulator.runSimulation(T, tick_for_save, input_file); 
+    }, arr[it->second]);
     return 0;
 }
 """

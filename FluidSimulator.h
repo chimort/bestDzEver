@@ -36,7 +36,7 @@ class FluidSimulator {
 public:
 
     FluidSimulator() = default;
-    void runSimulation(size_t T, size_t save_count);
+    void runSimulation(size_t T, size_t save_count, const std::string& file_name);
 
 private:
     VType rho_[256] {};
@@ -333,13 +333,17 @@ void FluidSimulator<Ptype, VType, VFlowType, N, M>::saveToJson(const std::string
 
 
 template<typename Ptype, typename VType, typename VFlowType, size_t N, size_t M>
-void FluidSimulator<Ptype, VType, VFlowType, N, M>::runSimulation(size_t T, size_t save_interval)
+void FluidSimulator<Ptype, VType, VFlowType, N, M>::runSimulation(size_t T, size_t save_interval, const std::string& file_name)
 {
     // rho_[' '] = 0.01;
     // rho_['.'] = 1000;
     // g_ = 0.1;
 
-    readInputFile("../input.json");
+    if (file_name.size() == 0) {
+        readInputFile("../input.json");
+    } else {
+        readInputFile(file_name);
+    }
 
     if (rho_[' '] == 0 || g_ == 0) {
         std::cout << "СЛИШКОМ МАЛЕНЬКАЯ ТОЧНОСТЬ, ПЕРЕМЕННЫЕ РАВНЫ 0\n";
@@ -349,9 +353,6 @@ void FluidSimulator<Ptype, VType, VFlowType, N, M>::runSimulation(size_t T, size
         return;
     }
     
-    std::cout << rho_[' '] << std::endl;
-    std::cout << rho_['.'] << std::endl;
-    std::cout << g_ << std::endl;
 
     for (size_t x = 0; x < field_.size(); ++x) {
             for (size_t y = 0; y < field_[0].size(); ++y) {
