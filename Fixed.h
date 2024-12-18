@@ -1,4 +1,3 @@
-// Fixed.h
 #pragma once
 
 #include <cstdint>
@@ -6,12 +5,10 @@
 #include <type_traits>
 #include <compare>
 
-// Определение тегов для различения типов
 struct FixedTag {};
 struct FastTag {};
-struct RawTag {}; // Определение RawTag
+struct RawTag {}; 
 
-// Шаблонная структура FixedPoint с дополнительным параметром Tag
 template <size_t N, size_t K, typename Tag = FixedTag>
 struct FixedPoint {
     static_assert(N <= 64, "FixedPoint<N, K> поддерживает максимум 64 бита.");
@@ -46,11 +43,9 @@ struct FixedPoint {
 
     StorageType v;
 
-    // Конструкторы
     FixedPoint() : v(0) {}
 
         friend std::ostream& operator<<(std::ostream& os, const FixedPoint& fp) {
-        // Используем существующий оператор преобразования к double
         os << static_cast<double>(fp);
         return os;
         }
@@ -67,14 +62,12 @@ struct FixedPoint {
     constexpr FixedPoint(RawTag, StorageType raw) 
         : v(raw) {}
 
-    // Шаблонный конструктор копирования для различных FixedPoint типов
     template <size_t M, size_t L, typename OtherTag>
     constexpr FixedPoint(const FixedPoint<M, L, OtherTag>& other) {
         double asDouble = static_cast<double>(other);
         v = static_cast<StorageType>(asDouble * (1ULL << K));
     }
 
-    // Шаблонный оператор присваивания для различных FixedPoint типов
     template <size_t M, size_t L, typename OtherTag>
     FixedPoint& operator=(const FixedPoint<M, L, OtherTag>& other) {
         double asDouble = static_cast<double>(other);
@@ -83,12 +76,10 @@ struct FixedPoint {
     }
 
 public:
-    // Функция для создания FixedPoint из "сырого" значения
     static constexpr FixedPoint from_raw(StorageType raw) {
         return FixedPoint(RawTag{}, raw);
     }
 
-    // Явные преобразования в float и double
     explicit operator float() const {
         return static_cast<float>(v) / (1ULL << K);
     }
@@ -102,12 +93,10 @@ public:
         return static_cast<Integral>(v >> K);
     }
 
-    // Автоматически сгенерированные операторы сравнения
     auto operator<=>(const FixedPoint&) const = default;
     bool operator==(const FixedPoint&) const = default;
     FixedPoint& operator=(const FixedPoint& other) = default;
 
-    // Арифметические операторы
     FixedPoint operator+(const FixedPoint& other) const {
         FixedPoint result;
         result.v = this->v + other.v;
@@ -142,7 +131,6 @@ public:
         return result;
     }
 
-    // Арифметические операторы с присваиванием
     FixedPoint& operator+=(const FixedPoint& other) {
         this->v += other.v;
         return *this;
@@ -164,14 +152,12 @@ public:
     }
 };
 
-// Алиасы для удобства использования
 template <size_t N, size_t K>
 using FIXED = FixedPoint<N, K, FixedTag>;
 
 template <size_t N, size_t K>
 using FAST_FIXED = FixedPoint<N, K, FastTag>;
 
-// Операторы сравнения между различными типами FixedPoint
 template <size_t N1, size_t K1, typename Tag1, size_t N2, size_t K2, typename Tag2>
 constexpr bool operator<=(const FixedPoint<N1, K1, Tag1>& lhs, const FixedPoint<N2, K2, Tag2>& rhs) {
     return static_cast<double>(lhs) <= static_cast<double>(rhs);
@@ -208,7 +194,6 @@ constexpr bool operator!=(const FixedPoint<N1, K1, Tag1>& lhs, const FixedPoint<
     return !(lhs == rhs);
 }
 
-// Арифметические операторы между различными типами FixedPoint
 template <size_t N1, size_t K1, typename Tag1, size_t N2, size_t K2, typename Tag2>
 constexpr FixedPoint<(N1 > N2 ? N1 : N2), (K1 > K2 ? K1 : K2)>
 operator+(const FixedPoint<N1, K1, Tag1>& lhs, const FixedPoint<N2, K2, Tag2>& rhs) {
@@ -245,7 +230,6 @@ operator/(const FixedPoint<N1, K1, Tag1>& lhs, const FixedPoint<N2, K2, Tag2>& r
     return FixedPoint<NewN, NewK>(quotient);
 }
 
-// Add operators where FixedPoint is on the right
 template <size_t N, size_t K, typename Tag>
 FixedPoint<N, K, Tag> operator+(double lhs, const FixedPoint<N, K, Tag>& rhs) {
     return FixedPoint<N, K, Tag>(lhs + static_cast<double>(rhs));
@@ -283,7 +267,6 @@ constexpr bool operator>(const FixedPoint<N, K, Tag>& lhs, double rhs) {
     return static_cast<double>(lhs) > rhs;
 }
 
-// Similarly, add overloads for float if necessary
 template <size_t N, size_t K, typename Tag>
 FixedPoint<N, K, Tag> operator+(const FixedPoint<N, K, Tag>& lhs, float rhs) {
     return FixedPoint<N, K, Tag>(static_cast<float>(lhs) + rhs);
@@ -358,7 +341,6 @@ FixedPoint<N, K, Tag> operator+(int lhs, const FixedPoint<N, K, Tag>& rhs) {
     return FixedPoint<N, K, Tag>(lhs) + rhs;
 }
 
-// Subtraction with integral types
 template <size_t N, size_t K, typename Tag>
 FixedPoint<N, K, Tag> operator-(const FixedPoint<N, K, Tag>& lhs, int rhs) {
     return lhs - FixedPoint<N, K, Tag>(rhs);
@@ -369,7 +351,6 @@ FixedPoint<N, K, Tag> operator-(int lhs, const FixedPoint<N, K, Tag>& rhs) {
     return FixedPoint<N, K, Tag>(lhs) - rhs;
 }
 
-// Multiplication with integral types
 template <size_t N, size_t K, typename Tag>
 FixedPoint<N, K, Tag> operator*(const FixedPoint<N, K, Tag>& lhs, int rhs) {
     return lhs * FixedPoint<N, K, Tag>(rhs);
@@ -380,7 +361,6 @@ FixedPoint<N, K, Tag> operator*(int lhs, const FixedPoint<N, K, Tag>& rhs) {
     return FixedPoint<N, K, Tag>(lhs) * rhs;
 }
 
-// Division with integral types
 template <size_t N, size_t K, typename Tag>
 FixedPoint<N, K, Tag> operator/(const FixedPoint<N, K, Tag>& lhs, int rhs) {
     return FixedPoint<N, K, Tag>(static_cast<double>(lhs) / rhs);
@@ -396,7 +376,6 @@ double operator-(double lhs, const FixedPoint<N, K, Tag>& rhs) {
     return lhs - static_cast<double>(rhs);
 }
 
-// Деление
 template <size_t N, size_t K, typename Tag>
 double operator/(const FixedPoint<N, K, Tag>& lhs, double rhs) {
     return static_cast<double>(lhs) / rhs;
