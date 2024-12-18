@@ -13,12 +13,11 @@ print_info("1) МНОГО ТИПОВ ПРИ ГЕНЕРАЦИИ ЛОМАЮТ ПР
 print_info("2) ТИПЫ С МАЛЕНЬКОЙ ТОЧНОСТЬЮ МОГУТ НЕ РАБОТАТЬ, НО ЭТО УЖЕ ПРОБЛЕМЫ РЕАЛИЗАЦИИ ФИЗИКИ.")
 print_info("3) СЛИШКОМ БОЛЬШИЕ ТИПЫ ТОЖЕ МОГУТ СЛОМАТЬ ПРОГРАММУ, ОПЯТЬ ЖЕ ИЗ-ЗА ИЗНАЧАЛЬНОЙ РЕАЛИЗАЦИИ.\n")
 
-execute_process(
-    COMMAND ulimit -s 67108864
-    RESULT_VARIABLE result
-    ERROR_VARIABLE error
-    OUTPUT_VARIABLE output
-)
+if (MSVC)
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /STACK:67108869")  # 64 MB для MSVC
+elseif (CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -Wl,-stack,67108869")  # 64 MB для GCC/Clang
+endif()
 
 if(DEFINED TYPES)
     execute_process(
@@ -27,8 +26,12 @@ if(DEFINED TYPES)
     )
     
     add_executable(bestDz main.cpp)
-
     target_include_directories(bestDz PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+    execute_process(
+        COMMAND bash ${CMAKE_CURRENT_SOURCE_DIR}/stack_change.sh
+        WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+    )
 
     print_info("ГЕНЕРАЦИЯ ЗАВЕРШЕНА УСПЕШНО.")
 else()
