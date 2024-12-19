@@ -38,7 +38,8 @@ int main(int argc, char* argv[]) {
 
     auto it = params.find(args_str);
     if (it == params.end()) {
-        std::cout << "No suitable params" << std::endl;
+        std::cout << "Неподходящие параметры" << std::endl;
+        std::cout << "Круглые скобки нужно либо экранировать, либо писать в ковычнах."
         return 1;
     }
 
